@@ -1,0 +1,387 @@
+body {
+    width: 100%;
+    overflow: hidden;
+    height: 100vh;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Fire animation overlay */
+.fire-on {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(#1d4456, #112630);
+    opacity: 1;
+    z-index: 1;
+    transition: all 1200ms linear;
+}
+
+.section-center {
+    position: relative;
+    width: 300px; /* Reduced size for landing page */
+    height: 300px;
+    margin: 0 auto;
+    display: block;
+    overflow: hidden;
+    border: 8px solid rgba(0,0,0,.2);
+    border-radius: 50%;
+    z-index: 5;
+    background-color: #1d4456;
+    box-shadow: 0 0 50px 5px rgba(255,148,0,.1);
+    transition: all 500ms linear;
+}
+
+/* Wood and star using local images */
+.wood {
+    position: absolute;
+    z-index: 21;
+    left: 50%;
+    bottom: 12%;
+    width: 80px;
+    margin-left: -40px;
+    height: 30px;
+    background-image: url('{{ url_for('static', filename='img/wood.png') }}');
+    background-size: 80px 30px;
+    border-radius: 5px;
+}
+
+.star {
+    z-index: 2;
+    position: absolute;
+    top: 138px;
+    left: 18px;
+    background-image: url('{{ url_for('static', filename='img/star.png') }}');
+    background-size: 11px 11px;
+    width: 11px;
+    height: 11px;
+    opacity: 0.4;
+    animation: starShine 3.5s linear infinite;
+    transition: all 1200ms linear;
+}
+
+.wood-circle {
+    position: absolute;
+    z-index: 20;
+    left: 50%;
+    bottom: 11%;
+    width: 100px;
+    margin-left: -50px;
+    height: 20px;
+    border-radius: 100%;
+    background-color: #0a171d;
+}
+
+.circle {
+    position: absolute;
+    z-index: 6;
+    right: -225px;
+    bottom: -337px;
+    width: 562px;
+    height: 525px;
+    border-radius: 100%;
+    background-color: #112630;
+}
+
+/* Moon */
+.moon {
+    position: absolute;
+    top: 37px;
+    left: 86px;
+    width: 60px;
+    height: 60px;
+    background-color: #b2b7bc;
+    border-radius: 50%;
+    box-shadow: inset -15px 1.5px 0 0px #c0c3c9, 0 0 7px 3px rgba(228,228,222,.4);
+    z-index: 1;
+    animation: brilla-moon 4s alternate infinite;
+    transition: all 2000ms linear;
+}
+
+.moon div:nth-child(1) {
+    position: absolute;
+    top: 50%;
+    left: 10%;
+    width: 12%;
+    height: 12%;
+    border-radius: 50%;
+    border: 1px solid #adaca2;
+    box-shadow: inset 1.5px -0.75px 0 0px #85868b;
+    opacity: 0.4;
+}
+
+.moon div:nth-child(2) {
+    position: absolute;
+    top: 20%;
+    left: 38%;
+    width: 16%;
+    height: 16%;
+    border-radius: 50%;
+    border: 1px solid #adaca2;
+    box-shadow: inset 1.5px -0.75px 0 0px #85868b;
+    opacity: 0.4;
+}
+
+.moon div:nth-child(3) {
+    position: absolute;
+    top: 60%;
+    left: 45%;
+    width: 20%;
+    height: 20%;
+    border-radius: 50%;
+    border: 1px solid #adaca2;
+    box-shadow: inset 1.5px -0.75px 0 0px #85868b;
+    opacity: 0.4;
+}
+
+@keyframes brilla-moon {
+    0% { box-shadow: inset -15px 1.5px 0 0px #c0c3c9, 0 0 7px 3px rgba(228,228,222,.4); }
+    50% { box-shadow: inset -15px 1.5px 0 0px #c0c3c9, 0 0 11px 6px rgba(228,228,222,.4); }
+}
+
+/* Shooting stars */
+.shooting-star {
+    z-index: 2;
+    width: 1px;
+    height: 37px;
+    border-bottom-left-radius: 50%;
+    border-bottom-right-radius: 50%;
+    position: absolute;
+    top: 0;
+    left: -52px;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0), white);
+    animation: animShootingStar 6s linear infinite;
+    transition: all 2000ms linear;
+}
+
+@keyframes animShootingStar {
+    from { transform: translateY(0px) translateX(0px) rotate(-45deg); opacity: 1; height: 3px; }
+    to { transform: translateY(960px) translateX(960px) rotate(-45deg); opacity: 1; height: 600px; }
+}
+
+.shooting-star-2 {
+    z-index: 2;
+    width: 1px;
+    height: 37px;
+    border-bottom-left-radius: 50%;
+    border-bottom-right-radius: 50%;
+    position: absolute;
+    top: 0;
+    left: 150px;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0), white);
+    animation: animShootingStar-2 9s linear infinite;
+    transition: all 2000ms linear;
+}
+
+@keyframes animShootingStar-2 {
+    from { transform: translateY(0px) translateX(0px) rotate(-45deg); opacity: 1; height: 3px; }
+    to { transform: translateY(1440px) translateX(1440px) rotate(-45deg); opacity: 1; height: 600px; }
+}
+
+/* Stars */
+.star.snd { top: 75px; left: 232px; animation-delay: 1s; }
+.star.trd { top: 97px; left: 75px; animation-delay: 1.4s; }
+.star.fth { top: 15px; left: 150px; animation-delay: 1.8s; }
+.star.fith { top: 63px; left: 165px; animation-delay: 2.2s; }
+
+@keyframes starShine {
+    0% { transform: scale(0.3) rotate(0deg); opacity: 0.4; }
+    25% { transform: scale(1) rotate(360deg); opacity: 1; }
+    50% { transform: scale(0.3) rotate(720deg); opacity: 0.4; }
+    100% { transform: scale(0.3) rotate(0deg); opacity: 0.4; }
+}
+
+/* Trees */
+.tree-1 {
+    position: relative;
+    top: 112px;
+    left: 37px;
+    width: 0;
+    height: 0;
+    z-index: 8;
+    border-bottom: 67px solid #0a171d;
+    border-left: 22px solid transparent;
+    border-right: 22px solid transparent;
+}
+
+.tree-1:before {
+    position: absolute;
+    bottom: -82px;
+    left: 50%;
+    margin-left: -3px;
+    width: 6px;
+    height: 22px;
+    z-index: 7;
+    content: '';
+    background-color: #000;
+}
+
+.tree-2 {
+    position: relative;
+    top: 0;
+    left: 187px;
+    width: 0;
+    height: 0;
+    z-index: 8;
+    border-bottom: 67px solid #0a171d;
+    border-left: 22px solid transparent;
+    border-right: 22px solid transparent;
+}
+
+.tree-2:before {
+    position: absolute;
+    bottom: -82px;
+    left: 50%;
+    margin-left: -3px;
+    width: 6px;
+    height: 22px;
+    z-index: 7;
+    content: '';
+    background-color: #000;
+}
+
+/* Fire */
+.fire {
+    position: absolute;
+    z-index: 39;
+    width: 2px;
+    margin-left: -1px;
+    left: 50%;
+    bottom: 60px;
+    transition: all 1200ms linear;
+}
+
+.fire span {
+    display: block;
+    position: absolute;
+    bottom: -11px;
+    margin-left: -15px;
+    height: 0;
+    width: 0;
+    border: 22px solid #febd08; /* Main flame: yellow-orange */
+    border-radius: 50%;
+    border-top-left-radius: 0;
+    left: -6px;
+    box-shadow: 0 0 7px 3px rgba(244,110,28,0.8), 0 0 15px 7px rgba(244,110,28,0.6), 0 0 22px 11px rgba(244,110,28,0.3);
+    transform: scale(0.45, 0.75) rotate(45deg);
+    animation: brilla-fire 2.5s alternate infinite;
+    z-index: 9;
+    transition: all 1200ms linear;
+}
+
+.fire span:nth-child(2) {
+    left: -16px;
+    border: 22px solid #e63946; /* Outside flame: red */
+    box-shadow: 0 0 7px 3px rgba(230,57,70,0.8), 0 0 15px 7px rgba(230,57,70,0.6), 0 0 22px 11px rgba(230,57,70,0.3);
+    transform: scale(0.3, 0.55) rotate(15deg);
+    z-index: 8;
+    animation: brilla-fire-red 1.5s alternate infinite;
+}
+
+.fire span:nth-child(3) {
+    left: 3px;
+    border: 22px solid #e63946; /* Outside flame: red */
+    box-shadow: 0 0 7px 3px rgba(230,57,70,0.8), 0 0 15px 7px rgba(230,57,70,0.6), 0 0 22px 11px rgba(230,57,70,0.3);
+    transform: scale(0.3, 0.55) rotate(80deg);
+    z-index: 8;
+    animation: brilla-fire-red 2s alternate infinite;
+}
+
+.fire span:after {
+    display: block;
+    position: absolute;
+    bottom: -22px;
+    content: '';
+    margin-left: -3px;
+    height: 22px;
+    width: 9px;
+    background-color: rgba(244,110,28,0.7);
+    border-radius: 80px;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    box-shadow: 0 0 15px 7px rgba(244,110,28,0.7);
+    left: -6px;
+    opacity: 0.8;
+    transform: rotate(-50deg);
+}
+
+.fire span:nth-child(2):after {
+    background-color: rgba(230,57,70,0.7); /* Match red flame */
+    box-shadow: 0 0 15px 7px rgba(230,57,70,0.7);
+}
+
+.fire span:nth-child(3):after {
+    background-color: rgba(230,57,70,0.7); /* Match red flame */
+    box-shadow: 0 0 15px 7px rgba(230,57,70,0.7);
+}
+
+@keyframes brilla-fire {
+    0%, 100% { box-shadow: 0 0 7px 3px rgba(244,110,28,0.8), 0 0 15px 7px rgba(244,110,28,0.6), 0 0 22px 11px rgba(244,110,28,0.3); }
+    50% { box-shadow: 0 0 10px 5px rgba(244,110,28,0.8), 0 0 21px 10px rgba(244,110,28,0.6), 0 0 31px 15px rgba(244,110,28,0.3); }
+}
+
+@keyframes brilla-fire-red {
+    0%, 100% { box-shadow: 0 0 7px 3px rgba(230,57,70,0.8), 0 0 15px 7px rgba(230,57,70,0.6), 0 0 22px 11px rgba(230,57,70,0.3); }
+    50% { box-shadow: 0 0 10px 5px rgba(230,57,70,0.8), 0 0 21px 10px rgba(230,57,70,0.6), 0 0 31px 15px rgba(230,57,70,0.3); }
+}
+
+/* Smoke */
+.smoke {
+    position: absolute;
+    z-index: 40;
+    width: 2px;
+    margin-left: -1px;
+    left: 50%;
+    bottom: 79px;
+    opacity: 0;
+    transition: all 800ms linear;
+}
+
+.smoke span {
+    display: block;
+    position: absolute;
+    bottom: -26px;
+    left: 50%;
+    margin-left: -15px;
+    height: 0;
+    width: 0;
+    border: 22px solid rgba(0, 0, 0, .6);
+    border-radius: 16px;
+    border-bottom-left-radius: 0;
+    border-top-right-radius: 0;
+    left: -6px;
+    opacity: 0;
+    transform: scale(0.2, 0.2) rotate(-45deg);
+}
+
+@keyframes smokeLeft {
+    0% { transform: scale(0.2, 0.2) translate(0, 0) rotate(-45deg); }
+    10% { opacity: 1; transform: scale(0.2, 0.3) translate(0, -3px) rotate(-45deg); }
+    60% { opacity: 0.6; transform: scale(0.3, 0.5) translate(-7px, -60px) rotate(-45deg); }
+    100% { opacity: 0; transform: scale(0.4, 0.8) translate(-15px, -90px) rotate(-45deg); }
+}
+
+@keyframes smokeRight {
+    0% { transform: scale(0.2, 0.2) translate(0, 0) rotate(-45deg); }
+    10% { opacity: 1; transform: scale(0.2, 0.3) translate(0, -3px) rotate(-45deg); }
+    60% { opacity: 0.6; transform: scale(0.3, 0.5) translate(7px, -60px) rotate(-45deg); }
+    100% { opacity: 0; transform: scale(0.4, 0.8) translate(15px, -90px) rotate(-45deg); }
+}
+
+.smoke .s-0 { animation: smokeLeft 7s 0s infinite; }
+.smoke .s-1 { animation: smokeRight 7s 0.7s infinite; }
+.smoke .s-2 { animation: smokeLeft 7s 1.4s infinite; }
+.smoke .s-3 { animation: smokeRight 7s 2.1s infinite; }
+.smoke .s-4 { animation: smokeLeft 7s 2.8s infinite; }
+.smoke .s-5 { animation: smokeRight 7s 3.5s infinite; }
+.smoke .s-6 { animation: smokeLeft 7s 4.2s infinite; }
+.smoke .s-7 { animation: smokeRight 7s 4.9s infinite; }
+.smoke .s-8 { animation: smokeLeft 7s 5.6s infinite; }
+.smoke .s-9 { animation: smokeRight 7s 6.3s infinite; }
+
+/* Dark Theme (fire-off) */
+html[data-theme="dark"] .fire-on { opacity: 0; }
+html[data-theme="dark"] .section-center { box-shadow: 0 0 50px 5px rgba(200,200,200,.2); }
+html[data-theme="dark"] .smoke { opacity: 1; transition-delay: 0.8s; }
+html[data-theme="dark"] .fire span { bottom: -26px; transform: scale(0.15, 0.15) rotate(45deg); }

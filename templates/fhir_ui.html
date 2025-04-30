@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="px-4 py-5 my-5 text-center">
+    <img class="d-block mx-auto mb-4" src="{{ url_for('static', filename='FHIRFLARE.png') }}" alt="FHIRFLARE IG Toolkit" width="192" height="192">
+    <h1 class="display-5 fw-bold text-body-emphasis">FHIR API Explorer</h1>
+    <div class="col-lg-6 mx-auto">
+        <p class="lead mb-4">
+            Interact with FHIR servers using GET, POST, PUT, or DELETE requests. Toggle between local HAPI or a custom server to explore resources or perform searches.
+        </p>
+        <!-----------------------------------------------------------------remove the buttons-----------------------------------------------------
+        <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+            <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg px-4 gap-3">Back to Home</a>
+            <a href="{{ url_for('validate_sample') }}" class="btn btn-outline-secondary btn-lg px-4">Validate FHIR Sample</a>
+            <a href="{{ url_for('fhir_ui_operations') }}" class="btn btn-outline-secondary btn-lg px-4">FHIR UI Operations</a>
+        </div>
+        -------------------------------------------------------------------------------------------------------------------------------------------->
+    </div>
+</div>
+
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-header"><i class="bi bi-cloud-arrow-down me-2"></i>Send FHIR Request</div>
+        <div class="card-body">
+            <form id="fhirRequestForm" onsubmit="return false;">
+                {{ form.hidden_tag() }}
+                <div class="mb-3">
+                    <label class="form-label">FHIR Server</label>
+                    <div class="input-group">
+                        <button type="button" class="btn btn-outline-primary" id="toggleServer">
+                            <span id="toggleLabel">Use Local HAPI</span>
+                        </button>
+                        <input type="text" class="form-control" id="fhirServerUrl" name="fhir_server_url" placeholder="e.g., https://hapi.fhir.org/baseR4" style="display: none;" aria-describedby="fhirServerHelp">
+                    </div>
+                    <small id="fhirServerHelp" class="form-text text-muted">Toggle to use local HAPI (http://localhost:8080/fhir) or enter a custom FHIR server URL.</small>
+                </div>
+                <div class="mb-3">
+                    <label for="fhirPath" class="form-label">FHIR Path</label>
+                    <input type="text" class="form-control" id="fhirPath" name="fhir_path" placeholder="e.g., Patient/wang-li" required aria-describedby="fhirPathHelp">
+                    <small id="fhirPathHelp" class="form-text text-muted">Enter a resource path (e.g., Patient, Observation/example) or '_search' for search queries.</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Request Type</label>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <input type="radio" class="btn-check" name="method" id="get" value="GET" checked>
+                        <label class="btn btn-outline-success" for="get"><span class="badge bg-success">GET</span></label>
+
+                        <input type="radio" class="btn-check" name="method" id="post" value="POST">
+                        <label class="btn btn-outline-primary" for="post"><span class="badge bg-primary">POST</span></label>
+
+                        <input type="radio" class="btn-check" name="method" id="put" value="PUT">
+                        <label class="btn btn-outline-warning" for="put"><span class="badge bg-warning text-dark">PUT</span></label>
+
+                        <input type="radio" class="btn-check" name="method" id="delete" value="DELETE">
+                        <label class="btn btn-outline-danger" for="delete"><span class="badge bg-danger">DELETE</span></label>
+                    </div>
+                </div>
+                <div class="mb-3" id="requestBodyGroup" style="display: none;">
+                    <div class="d-flex align-items-center mb-2">
+                        <label for="requestBody" class="form-label me-2 mb-0">Request Body</label>
+                        <button type="button" class="btn btn-outline-secondary btn-sm btn-copy" id="copyRequestBody" title="Copy to Clipboard"><i class="bi bi-clipboard"></i></button>
+                    </div>
+                    <textarea class="form-control" id="requestBody" name="request_body" rows="6" placeholder="For POST: JSON resource (e.g., {'resourceType': 'Patient', ...}) or search params (e.g., name=John&birthdate=gt2000)"></textarea>
+                    <div id="jsonError" class="text-danger mt-1" style="display: none;"></div>
+                </div>
+                <button type="button" class="btn btn-primary" id="sendRequest">Send Request</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mt-4" id="responseCard" style="display: none;">
+        <div class="card-header">Response</div>
+        <div class="card-body">
+            <h5>Status: <span id="responseStatus" class="badge"></span></h5>
+            <div class="d-flex align-items-center mb-2">
+                <h6 class="me-2 mb-0">Headers</h6>
+                <button type="button" class="btn btn-outline-secondary btn-sm btn-copy" id="copyResponseHeaders" title="Copy to Clipboard"><i class="bi bi-clipboard"></i></button>
+            </div>
+            <pre id="responseHeaders" class="border p-2 bg-light mb-3" style="max-height: 200px; overflow-y: auto;"></pre>
+            <div class="d-flex align-items-center mb-2">
+                <h6 class="me-2 mb-0">Body</h6>
+                <button type="button" class="btn btn-outline-secondary btn-sm btn-copy" id="copyResponseBody" title="Copy to Clipboard"><i class="bi bi-clipboard"></i></button>
+            </div>
+            <pre id="responseBody" class="border p-2 bg-light" style="max-height: 400px; overflow-y: auto;"></pre>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("DOMContentLoaded event fired.");
+
+    // --- Get DOM Elements & Check Existence ---
+    const form = document.getElementById('fhirRequestForm');
+    const sendButton = document.getElementById('sendRequest');
+    const fhirPathInput = document.getElementById('fhirPath');
+    const requestBodyInput = document.getElementById('requestBody');
+    const requestBodyGroup = document.getElementById('requestBodyGroup');
+    const jsonError = document.getElementById('jsonError');
+    const responseCard = document.getElementById('responseCard');
+    const responseStatus = document.getElementById('responseStatus');
+    const responseHeaders = document.getElementById('responseHeaders');
+    const responseBody = document.getElementById('responseBody');
+    const methodRadios = document.getElementsByName('method');
+    const toggleServerButton = document.getElementById('toggleServer');
+    const toggleLabel = document.getElementById('toggleLabel');
+    const fhirServerUrlInput = document.getElementById('fhirServerUrl');
+    const copyRequestBodyButton = document.getElementById('copyRequestBody');
+    const copyResponseHeadersButton = document.getElementById('copyResponseHeaders');
+    const copyResponseBodyButton = document.getElementById('copyResponseBody');
+
+    // Basic check for critical elements
+    if (!form || !sendButton || !fhirPathInput || !responseCard || !toggleServerButton || !fhirServerUrlInput || !responseStatus || !responseHeaders || !responseBody || !toggleLabel) {
+        console.error("One or more critical UI elements could not be found. Script execution halted.");
+        alert("Error initializing UI components. Please check the console.");
+        return; // Stop script execution
+    }
+    console.log("All critical elements checked/found.");
+
+    // --- State Variable ---
+    // Default assumes standalone, will be forced otherwise by appMode check below
+    let useLocalHapi = true;
+
+    // --- Get App Mode from Flask Context ---
+    // Ensure this variable is correctly passed from Flask using the context_processor
+    const appMode = '{{ app_mode | default("standalone") | lower }}';
+    console.log('App Mode Detected:', appMode);
+
+    // --- DEFINE HELPER FUNCTIONS ---
+
+    // Validates request body, returns null on error, otherwise returns body string or empty string
+    function validateRequestBody(method, path) {
+        if (!requestBodyInput || !jsonError) return (method === 'POST' || method === 'PUT') ? '' : undefined;
+        const bodyValue = requestBodyInput.value.trim();
+        requestBodyInput.classList.remove('is-invalid'); // Reset validation
+        jsonError.style.display = 'none';
+
+        if (!bodyValue) return ''; // Empty body is valid for POST/PUT
+
+        const isSearch = path && path.endsWith('_search');
+        const isJson = bodyValue.startsWith('{') || bodyValue.startsWith('[');
+        const isXml = bodyValue.startsWith('<');
+        const isForm = !isJson && !isXml;
+
+        if (method === 'POST' && isSearch && isForm) { // POST Search with form params
+            return bodyValue;
+        } else if (method === 'POST' || method === 'PUT') { // Other POST/PUT expect JSON/XML
+            if (isJson) {
+                try { JSON.parse(bodyValue); return bodyValue; }
+                catch (e) { jsonError.textContent = `Invalid JSON: ${e.message}`; }
+            } else if (isXml) {
+                // Basic XML check is difficult in JS, accept it for now
+                // Backend or target server will validate fully
+                return bodyValue;
+            } else { // Neither JSON nor XML, and not a POST search form
+                jsonError.textContent = 'Request body must be valid JSON or XML for PUT/POST (unless using POST _search with form parameters).';
+            }
+            requestBodyInput.classList.add('is-invalid');
+            jsonError.style.display = 'block';
+            return null; // Indicate validation error
+        }
+        return undefined; // Indicate no body should be sent for GET/DELETE
+    }
+
+    // Cleans path for proxying
+    function cleanFhirPath(path) {
+        if (!path) return '';
+        // Remove optional leading 'r4/' or 'fhir/', then trim slashes
+        return path.replace(/^(r4\/|fhir\/)*/i, '').replace(/^\/+|\/+$/g, '');
+    }
+
+    // Copies text to clipboard
+    async function copyToClipboard(text, button) {
+        if (text === null || text === undefined || !button || !navigator.clipboard) return;
+        try {
+            await navigator.clipboard.writeText(String(text));
+            const originalIcon = button.innerHTML;
+            button.innerHTML = '<i class="bi bi-check-lg"></i> Copied!';
+            setTimeout(() => { if(button.isConnected) button.innerHTML = originalIcon; }, 1500);
+        } catch (err) { console.error('Copy failed:', err); /* Optionally alert user */ }
+    }
+
+    // Updates the UI elements related to the server toggle button/input
+    function updateServerToggleUI() {
+        if (appMode === 'lite') {
+            // LITE MODE: Force Custom URL, disable toggle
+            useLocalHapi = false; // Force state
+            toggleServerButton.disabled = true;
+            toggleServerButton.classList.add('disabled');
+            toggleServerButton.style.pointerEvents = 'none'; // Make unclickable
+            toggleServerButton.setAttribute('aria-disabled', 'true');
+            toggleServerButton.title = "Local HAPI server is unavailable in Lite mode";
+            toggleLabel.textContent = 'Use Custom URL'; // Always show this label
+            fhirServerUrlInput.style.display = 'block'; // Always show input
+            fhirServerUrlInput.placeholder = "Enter FHIR Base URL (Local HAPI unavailable)";
+            fhirServerUrlInput.required = true; // Make required in lite mode
+        } else {
+            // STANDALONE MODE: Allow toggle
+            toggleServerButton.disabled = false;
+            toggleServerButton.classList.remove('disabled');
+            toggleServerButton.style.pointerEvents = 'auto';
+            toggleServerButton.removeAttribute('aria-disabled');
+            toggleServerButton.title = "Toggle between Local HAPI and Custom URL";
+            toggleLabel.textContent = useLocalHapi ? 'Using Local HAPI' : 'Using Custom URL';
+            fhirServerUrlInput.style.display = useLocalHapi ? 'none' : 'block';
+            fhirServerUrlInput.placeholder = "e.g., https://hapi.fhir.org/baseR4";
+            fhirServerUrlInput.required = !useLocalHapi; // Required only if custom is selected
+        }
+        fhirServerUrlInput.classList.remove('is-invalid'); // Clear validation state on toggle
+        console.log(`UI Updated: useLocalHapi=${useLocalHapi}, Button Disabled=${toggleServerButton.disabled}, Input Visible=${fhirServerUrlInput.style.display !== 'none'}, Input Required=${fhirServerUrlInput.required}`);
+    }
+
+    // Toggles the server selection state (only effective in Standalone mode)
+    function toggleServer() {
+        if (appMode === 'lite') {
+            console.log("Toggle ignored: Lite mode active.");
+            return; // Do nothing in lite mode
+        }
+        useLocalHapi = !useLocalHapi;
+        if (useLocalHapi && fhirServerUrlInput) {
+            fhirServerUrlInput.value = ''; // Clear custom URL when switching to local
+        }
+        updateServerToggleUI(); // Update UI based on new state
+        console.log(`Server toggled: Now using ${useLocalHapi ? 'Local HAPI' : 'Custom URL'}`);
+    }
+
+    // Updates visibility of the Request Body textarea based on selected HTTP method
+    function updateRequestBodyVisibility() {
+        const selectedMethod = document.querySelector('input[name="method"]:checked')?.value;
+        if (!requestBodyGroup || !selectedMethod) return;
+        const showBody = (selectedMethod === 'POST' || selectedMethod === 'PUT');
+        requestBodyGroup.style.display = showBody ? 'block' : 'none';
+        if (!showBody) { // Clear body and errors if body not needed
+            if (requestBodyInput) requestBodyInput.value = '';
+            if (jsonError) jsonError.style.display = 'none';
+            if (requestBodyInput) requestBodyInput.classList.remove('is-invalid');
+        }
+    }
+
+    // --- INITIAL SETUP & MODE CHECK ---
+    updateServerToggleUI(); // Set initial UI based on detected mode and default state
+    updateRequestBodyVisibility(); // Set initial visibility based on default method (GET)
+
+    // --- ATTACH EVENT LISTENERS ---
+    toggleServerButton.addEventListener('click', toggleServer);
+    if (methodRadios) { methodRadios.forEach(radio => { radio.addEventListener('change', updateRequestBodyVisibility); }); }
+    if (requestBodyInput && fhirPathInput) { requestBodyInput.addEventListener('input', () => validateRequestBody( document.querySelector('input[name="method"]:checked')?.value, fhirPathInput.value )); }
+    if (copyRequestBodyButton && requestBodyInput) { copyRequestBodyButton.addEventListener('click', () => copyToClipboard(requestBodyInput.value, copyRequestBodyButton)); }
+    if (copyResponseHeadersButton && responseHeaders) { copyResponseHeadersButton.addEventListener('click', () => copyToClipboard(responseHeaders.textContent, copyResponseHeadersButton)); }
+    if (copyResponseBodyButton && responseBody) { copyResponseBodyButton.addEventListener('click', () => copyToClipboard(responseBody.textContent, copyResponseBodyButton)); }
+
+    // --- Send Request Button Listener ---
+    sendButton.addEventListener('click', async function() {
+        console.log("Send Request button clicked.");
+        // --- UI Reset ---
+        sendButton.disabled = true; sendButton.textContent = 'Sending...';
+        responseCard.style.display = 'none';
+        responseStatus.textContent = ''; responseHeaders.textContent = ''; responseBody.textContent = '';
+        responseStatus.className = 'badge'; // Reset badge class
+        fhirServerUrlInput.classList.remove('is-invalid'); // Reset validation
+        if(requestBodyInput) requestBodyInput.classList.remove('is-invalid');
+        if(jsonError) jsonError.style.display = 'none';
+
+        // --- Get Values ---
+        const path = fhirPathInput.value.trim();
+        const method = document.querySelector('input[name="method"]:checked')?.value;
+        const customUrl = fhirServerUrlInput.value.trim();
+        let body = undefined;
+
+        // --- Basic Input Validation ---
+        if (!path) { alert('Please enter a FHIR Path.'); sendButton.disabled = false; sendButton.textContent = 'Send Request'; return; }
+        if (!method) { alert('Please select a Request Type.'); sendButton.disabled = false; sendButton.textContent = 'Send Request'; return; }
+        if (!useLocalHapi && !customUrl) { // Custom URL mode needs a URL
+            alert('Please enter a custom FHIR Server URL.'); fhirServerUrlInput.classList.add('is-invalid'); sendButton.disabled = false; sendButton.textContent = 'Send Request'; return;
+        }
+        if (!useLocalHapi && customUrl) { // Validate custom URL format
+             try { new URL(customUrl); }
+             catch (_) { alert('Invalid custom FHIR Server URL format.'); fhirServerUrlInput.classList.add('is-invalid'); sendButton.disabled = false; sendButton.textContent = 'Send Request'; return; }
+        }
+
+        // --- Validate & Get Body (if needed) ---
+        if (method === 'POST' || method === 'PUT') {
+             body = validateRequestBody(method, path);
+             if (body === null) { // null indicates validation error
+                 alert('Request body contains invalid JSON/Format.'); sendButton.disabled = false; sendButton.textContent = 'Send Request'; return;
+             }
+             // If body is empty string, ensure it's treated as such for fetch
+             if (body === '') body = '';
+        }
+
+        // --- Determine Fetch URL and Headers ---
+        const cleanedPath = cleanFhirPath(path);
+        const finalFetchUrl = '/fhir/' + cleanedPath; // Always send to the backend proxy endpoint
+        const headers = { 'Accept': 'application/fhir+json, application/fhir+xml;q=0.9, */*;q=0.8' };
+
+        // Determine Content-Type if body exists
+        if (body !== undefined) {
+             if (body.trim().startsWith('{')) { headers['Content-Type'] = 'application/fhir+json'; }
+             else if (body.trim().startsWith('<')) { headers['Content-Type'] = 'application/fhir+xml'; }
+             else if (method === 'POST' && path.endsWith('_search') && body && !body.trim().startsWith('{') && !body.trim().startsWith('<')) { headers['Content-Type'] = 'application/x-www-form-urlencoded'; }
+             else if (body) { headers['Content-Type'] = 'application/fhir+json'; } // Default if unknown but present
+        }
+
+        // Add Custom Target Header if needed
+        if (!useLocalHapi && customUrl) {
+            headers['X-Target-FHIR-Server'] = customUrl.replace(/\/+$/, ''); // Send custom URL without trailing slash
+            console.log("Adding header X-Target-FHIR-Server:", headers['X-Target-FHIR-Server']);
+        }
+
+        // Add CSRF token ONLY if sending to local proxy (for modifying methods)
+        const csrfTokenInput = form.querySelector('input[name="csrf_token"]');
+        const csrfToken = csrfTokenInput ? csrfTokenInput.value : null;
+        // Include DELETE method for CSRF check
+        if (useLocalHapi && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && csrfToken) {
+             headers['X-CSRFToken'] = csrfToken;
+             console.log("CSRF Token added for local request.");
+        } else if (useLocalHapi && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && !csrfToken) {
+             console.warn("CSRF token input not found for local modifying request.");
+        }
+
+        console.log(`Executing Fetch: Method=${method}, URL=${finalFetchUrl}, LocalHAPI=${useLocalHapi}`);
+        console.log("Request Headers:", headers);
+        if (body !== undefined) console.log("Request Body (first 300 chars):", (body || '').substring(0, 300) + ((body?.length ?? 0) > 300 ? "..." : ""));
+
+        // --- Make the Fetch Request ---
+        try {
+            const response = await fetch(finalFetchUrl, {
+                method: method,
+                headers: headers,
+                body: body // Will be undefined for GET/DELETE
+            });
+
+            // --- Process Response ---
+            responseCard.style.display = 'block';
+            responseStatus.textContent = `${response.status} ${response.statusText}`;
+            responseStatus.className = `badge ${response.ok ? 'bg-success' : 'bg-danger'}`;
+
+            let headerText = '';
+            response.headers.forEach((value, key) => { headerText += `${key}: ${value}\n`; });
+            responseHeaders.textContent = headerText.trim();
+
+            const responseContentType = response.headers.get('content-type') || '';
+            let responseBodyText = await response.text();
+            let displayBody = responseBodyText;
+
+            // Attempt to pretty-print JSON
+            if (responseContentType.includes('json') && responseBodyText.trim()) {
+                try { displayBody = JSON.stringify(JSON.parse(responseBodyText), null, 2); }
+                catch (e) { console.warn("Failed to pretty-print JSON response:", e); /* Show raw text */ }
+            }
+            // Attempt to pretty-print XML (basic indentation)
+            else if (responseContentType.includes('xml') && responseBodyText.trim()) {
+                 try {
+                      let formattedXml = '';
+                      let indent = 0;
+                      const xmlLines = responseBodyText.replace(/>\s*</g, '><').split(/(<[^>]+>)/);
+                      for (let i = 0; i < xmlLines.length; i++) {
+                           const node = xmlLines[i];
+                           if (!node || node.trim().length === 0) continue;
+                           if (node.match(/^<\/\w/)) indent--; // Closing tag
+                           formattedXml += '  '.repeat(Math.max(0, indent)) + node.trim() + '\n';
+                           if (node.match(/^<\w/) && !node.match(/\/>$/) && !node.match(/^<\?/)) indent++; // Opening tag
+                      }
+                      displayBody = formattedXml.trim();
+                 } catch(e) { console.warn("Basic XML formatting failed:", e); /* Show raw text */ }
+            }
+
+            responseBody.textContent = displayBody;
+
+             // Highlight response body if Prism.js is available
+             if (typeof Prism !== 'undefined') {
+                 responseBody.className = 'border p-2 bg-light'; // Reset base classes
+                 if (responseContentType.includes('json')) {
+                     responseBody.classList.add('language-json');
+                 } else if (responseContentType.includes('xml')) {
+                     responseBody.classList.add('language-xml');
+                 } // Add other languages if needed
+                 Prism.highlightElement(responseBody);
+             }
+
+        } catch (error) {
+            console.error('Fetch error:', error);
+            responseCard.style.display = 'block';
+            responseStatus.textContent = `Network Error`;
+            responseStatus.className = 'badge bg-danger';
+            responseHeaders.textContent = 'N/A';
+            // Provide a more informative error message
+            let errorDetail = `Error: ${error.message}\n\n`;
+            if (useLocalHapi) {
+                 errorDetail += `Could not connect to the FHIRFLARE proxy at ${finalFetchUrl}. Ensure the toolkit server and the local HAPI FHIR server (at http://localhost:8080/fhir) are running.`;
+            } else {
+                 errorDetail += `Could not connect to the FHIRFLARE proxy at ${finalFetchUrl} or the proxy could not connect to the target server (${customUrl}). Ensure the toolkit server is running and the target server is accessible.`;
+            }
+            responseBody.textContent = errorDetail;
+        } finally {
+            sendButton.disabled = false; sendButton.textContent = 'Send Request';
+        }
+    }); // End sendButton listener
+
+}); // End DOMContentLoaded Listener
+</script>
+{% endblock %}

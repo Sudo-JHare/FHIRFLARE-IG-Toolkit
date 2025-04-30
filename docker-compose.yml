@@ -1,0 +1,20 @@
+version: '3.8'
+services:
+  fhirflare:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+      - "8080:8080" # Keep port exposed, even if Tomcat isn't running useful stuff in Lite
+    volumes:
+      - ./instance:/app/instance
+      - ./static/uploads:/app/static/uploads
+      - ./instance/hapi-h2-data/:/app/h2-data # Keep volume mounts consistent
+      - ./logs:/app/logs
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - NODE_PATH=/usr/lib/node_modules
+      - APP_MODE=standalone 
+    command: supervisord -c /etc/supervisord.conf

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="px-4 py-5 my-5 text-center">
+    <img class="d-block mx-auto mb-4" src="{{ url_for('static', filename='FHIRFLARE.png') }}" alt="" width="192" height="192">
+    <h1 class="display-5 fw-bold text-body-emphasis">About FHIRFLARE IG Toolkit{% if app_mode == 'lite' %} (Lite Version){% endif %}</h1>
+    <div class="col-lg-8 mx-auto">
+        <p class="lead mb-4">
+            A comprehensive toolkit designed for developers and implementers working with FHIR® Implementation Guides (IGs).
+        </p>
+    </div>
+</div>
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <h2>Overview</h2>
+            <p>The FHIRFLARE IG Toolkit is a web application built to simplify the lifecycle of managing, processing, validating, and deploying FHIR Implementation Guides. It provides a central, user-friendly interface to handle common tasks associated with FHIR IGs, streamlining workflows and improving productivity.</p>
+            <p>Whether you're downloading the latest IG versions, checking compliance, converting resources to FHIR Shorthand (FSH), or pushing guides to a test server, this toolkit aims to be an essential companion.</p>
+             {% if app_mode == 'lite' %}
+                <div class="alert alert-info" role="alert">
+                    <i class="bi bi-info-circle-fill me-2"></i>You are currently running the <strong>Lite Version</strong> of the toolkit. This version excludes the built-in HAPI FHIR server and relies on external FHIR servers for functionalities like the API Explorer and Operations UI. Validation uses local StructureDefinition checks.
+                </div>
+             {% else %}
+                 <div class="alert alert-success" role="alert">
+                     <i class="bi bi-check-circle-fill me-2"></i>You are currently running the <strong>Standalone Version</strong> of the toolkit, which includes a built-in HAPI FHIR server (accessible via the `/fhir` proxy) for local validation and exploration.
+                 </div>
+             {% endif %}
+
+
+            <h2 class="mt-4">Core Features</h2>
+            <ul>
+                <li><strong>IG Package Management:</strong> Import FHIR IG packages directly from the registry using various version formats (e.g., `1.1.0-preview`, `current`), with flexible dependency handling (Recursive, Patch Canonical, Tree Shaking). View, process, unload, or delete downloaded packages, with detection of duplicate dependencies.</li>
+                <li><strong>IG Processing & Viewing:</strong> Extract and display key information from processed IGs, including defined profiles, referenced resource types, must-support elements, and examples. Visualize profile relationships like `compliesWithProfile` and `imposeProfile`.</li>
+                <li><strong>FHIR Validation:</strong> Validate individual FHIR resources or entire Bundles against the profiles defined within a selected IG. Provides detailed error and warning feedback. (Note: Validation accuracy is still under development, especially for complex constraints).</li>
+                <li><strong>FHIR Server Interaction:</strong>
+                    <ul>
+                        <li>Push processed IGs (including dependencies) to a target FHIR server with real-time console feedback.</li>
+                        <li>Explore FHIR server capabilities and interact with resources using the "FHIR API Explorer" (GET/POST/PUT/DELETE) and "FHIR UI Operations" pages, supporting both the local HAPI server (in Standalone mode) and external servers.</li>
+                    </ul>
+                </li>
+                <li><strong>FHIR Shorthand (FSH) Conversion:</strong> Convert FHIR JSON or XML resources to FSH using the integrated GoFSH tool. Offers advanced options like context package selection, various output styles, FHIR version selection, dependency loading, alias file usage, and round-trip validation ("Fishing Trip") with SUSHI. Includes a loading indicator during conversion.</li>
+                <li><strong>API Support:</strong> Provides basic API endpoints for programmatic import and push operations.</li>
+            </ul>
+
+            <h2 class="mt-4">Technology</h2>
+            <p>The toolkit leverages a combination of technologies:</p>
+            <ul>
+                <li><strong>Backend:</strong> Python with the Flask web framework and SQLAlchemy for database interaction (SQLite).</li>
+                <li><strong>Frontend:</strong> HTML, Bootstrap 5 for styling, and JavaScript for interactivity and dynamic content loading. Uses Lottie-Web for animations.</li>
+                <li><strong>FHIR Tooling:</strong> Integrates GoFSH and SUSHI (via Node.js) for FSH conversion and validation. Utilizes the HAPI FHIR server (in Standalone mode) for robust FHIR validation and operations.</li>
+                <li><strong>Deployment:</strong> Runs within a Docker container managed by Docker Compose and Supervisor, ensuring a consistent environment.</li>
+            </ul>
+
+            <h2 class="mt-4">Get Involved</h2>
+            <p>This is an open-source project. Contributions, feedback, and bug reports are welcome!</p>
+            <ul>
+                <li><strong>GitHub Repository:</strong> <a href="https://github.com/Sudo-JHare/FHIRFLARE-IG-Toolkit" target="_blank" rel="noopener noreferrer">Sudo-JHare/FHIRFLARE-IG-Toolkit</a></li>
+                <li><strong>Report an Issue:</strong> <a href="https://github.com/Sudo-JHare/FHIRFLARE-IG-Toolkit/issues/new/choose" target="_blank" rel="noopener noreferrer">Raise an Issue</a></li>
+                <li><strong>Discussions:</strong> <a href="https://github.com/Sudo-JHare/FHIRFLARE-IG-Toolkit/discussions" target="_blank" rel="noopener noreferrer">Project Discussions</a></li>
+            </ul>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

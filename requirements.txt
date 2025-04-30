@@ -5,3 +5,5 @@ requests==2.31.0
 Flask-WTF==1.2.1
 WTForms==3.1.2
 Pytest
+fhir.resources==8.0.0
+Flask-Migrate==4.1.0

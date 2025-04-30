@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% from "_form_helpers.html" import render_field %}
+
+{% block content %}
+<div class="px-4 py-5 my-5 text-center">
+    <img class="d-block mx-auto mb-4" src="{{ url_for('static', filename='FHIRFLARE.png') }}" alt="FHIRFLARE IG Toolkit" width="192" height="192">
+    <h1 class="display-5 fw-bold text-body-emphasis">FSH Converter</h1>
+    <div class="col-lg-6 mx-auto">
+        <p class="lead mb-4">
+            Convert FHIR JSON or XML resources to FHIR Shorthand (FSH) using GoFSH.
+        </p>
+          <!-----------------------------------------------------------------remove the buttons-----------------------------------------------------
+        <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+            <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg px-4 gap-3">Back to Home</a>
+            <a href="{{ url_for('view_igs') }}" class="btn btn-outline-secondary btn-lg px-4">View Downloaded IGs</a>
+            <a href="{{ url_for('validate_sample') }}" class="btn btn-outline-secondary btn-lg px-4">Validate Sample</a>
+            <a href="{{ url_for('fhir_ui_operations') }}" class="btn btn-outline-secondary btn-lg px-4">FHIR Operations</a>
+        </div>
+          -----------------------------------------------------------------remove the buttons----------------------------------------------------->
+    </div>
+</div>
+
+<!-- Spinner Overlay -->
+<div id="spinner-overlay" class="d-none position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex align-items-center justify-content-center" style="z-index: 1050;">
+    <div class="text-center">
+        <div id="spinner-animation" style="width: 200px; height: 200px;"></div>
+        <p class="text-white mt-3">Waiting, don't leave this page...</p>
+    </div>
+</div>
+
+<div class="container mt-4">
+    <h2><i class="bi bi-file-code me-2"></i>Convert FHIR to FSH</h2>
+    <div id="fsh-output">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body">
+                        <form id="fsh-converter-form" method="POST" enctype="multipart/form-data" class="form">
+                            {{ form.hidden_tag() }}
+                            {{ render_field(form.package) }}
+                            {{ render_field(form.input_mode) }}
+                            <div id="file-upload" style="display: none;">
+                                {{ render_field(form.fhir_file) }}
+                            </div>
+                            <div id="text-input" style="display: none;">
+                                {{ render_field(form.fhir_text) }}
+                            </div>
+                            {{ render_field(form.output_style) }}
+                            {{ render_field(form.log_level) }}
+                            {{ render_field(form.fhir_version) }}
+                            {{ render_field(form.fishing_trip) }}
+                            {{ render_field(form.dependencies, placeholder="One per line, e.g., hl7.fhir.us.core@6.1.0") }}
+                            {{ render_field(form.indent_rules) }}
+                            {{ render_field(form.meta_profile) }}
+                            {{ render_field(form.alias_file) }}
+                            {{ render_field(form.no_alias) }}
+                            <div class="d-grid gap-2 d-sm-flex">
+                                {{ form.submit(class="btn btn-success", id="submit-btn") }}
+                                <a href="{{ url_for('index') }}" class="btn btn-secondary">Back</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/lottie.min.js') }}"></script>
+<script>
+    // --- Global Variables and Helper Functions (Defined *outside* DOMContentLoaded) ---
+    let currentLottieAnimation = null;
+
+    function loadLottieAnimation(theme) {
+        // console.log(`loadLottieAnimation called with theme: ${theme}`); // Optional debug log
+        const spinnerContainer = document.getElementById('spinner-animation');
+        // console.log(`Found spinnerContainer: ${!!spinnerContainer}`); // Optional debug log
+        if (!spinnerContainer) return;
+        if (currentLottieAnimation) {
+            // console.log("Destroying previous Lottie animation."); // Optional debug log
+            currentLottieAnimation.destroy();
+            currentLottieAnimation = null;
+        }
+        const animationPath = (theme === 'dark')
+            ? '{{ url_for('static', filename='animations/loading-dark.json') }}'
+            : '{{ url_for('static', filename='animations/loading-light.json') }}';
+        // console.log(`Determined animation path: ${animationPath}`); // Optional debug log
+        try {
+            currentLottieAnimation = lottie.loadAnimation({ container: spinnerContainer, renderer: 'svg', loop: true, autoplay: true, path: animationPath });
+            // console.log("New Lottie animation loaded."); // Optional debug log
+        } catch(lottieError) {
+             console.error("Error loading Lottie animation:", lottieError);
+        }
+    }
+
+    // --- Function to handle input mode changes (for SELECT element) ---
+    function handleInputModeChange(selectElement) {
+        if (!selectElement) { console.error("handleInputModeChange called with no selectElement"); return; }
+        const selectedValue = selectElement.value; // Get value from the select element
+        console.log(`handleInputModeChange called for value: ${selectedValue}`); // Keep this log for now
+
+        const form = selectElement.closest('form');
+        if (!form) { console.error('Could not find parent form for input mode toggle.'); return; }
+
+        const fileUploadDiv = form.querySelector('#file-upload');
+        const textInputDiv = form.querySelector('#text-input');
+        // console.log(`Found fileUploadDiv: ${!!fileUploadDiv}, Found textInputDiv: ${!!textInputDiv}`); // Optional debug log
+
+        if (fileUploadDiv && textInputDiv) {
+            // Show/hide based on the SELECTED VALUE
+            if (selectedValue === 'file') {
+                fileUploadDiv.style.display = 'block';
+                textInputDiv.style.display = 'none';
+            } else { // Assuming 'text' is the other value
+                fileUploadDiv.style.display = 'none';
+                textInputDiv.style.display = 'block';
+            }
+            // console.log(`Set display - file: ${fileUploadDiv.style.display}, text: ${textInputDiv.style.display}`); // Optional debug log
+        } else {
+            console.error('Could not find file-upload or text-input divs within the form.');
+        }
+    }
+
+    // --- Function to initialize UI elements within a container (for SELECT element) ---
+    function initializeFshConverterUI(containerElement) {
+        console.log("Initializing FSH Converter UI within:", containerElement === document ? "document" : "outputContainer"); // Keep this log for now
+        // --- Input Mode Toggle Initialization ---
+        // Select the dropdown using its ID
+        const inputModeSelect = containerElement.querySelector('#input_mode'); // Use ID selector for the select
+
+        if (inputModeSelect) {
+            // Attach the listener directly to the select element
+            inputModeSelect.addEventListener('change', (event) => {
+                // Pass the select element itself to the handler
+                handleInputModeChange(event.target);
+            });
+
+            // Set initial state based on the select element's current value
+            console.log(`Initial input mode detected: ${inputModeSelect.value}`); // Keep this log
+            handleInputModeChange(inputModeSelect); // Call handler directly with the select element
+
+        } else {
+             // This error should hopefully not appear now
+            console.error('Input mode select element (#input_mode) not found within container:', containerElement);
+        }
+
+        // Only load initial Lottie when initializing the whole document
+        if (containerElement === document) {
+             const currentTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+             // Make sure loadLottieAnimation function exists before calling
+             if (typeof loadLottieAnimation === 'function') {
+                 loadLottieAnimation(currentTheme);
+             } else {
+                 console.error("loadLottieAnimation function not defined.");
+             }
+        }
+    } // End initializeFshConverterUI
+
+    // --- Main Execution on DOMContentLoaded ---
+    document.addEventListener('DOMContentLoaded', function() {
+
+        // --- Initial UI Setup ---
+        // Use setTimeout for the initial call to ensure form elements are ready
+        setTimeout(() => {
+             initializeFshConverterUI(document);
+        }, 50); // Using a slightly longer delay just in case 0 isn't enough
+
+        // --- Form submission with AJAX (Event Delegation) ---
+        const outputContainer = document.getElementById('fsh-output');
+        if (outputContainer) {
+             outputContainer.addEventListener('submit', async function(event) {
+                 // Check if the event originated from our specific form
+                 if (event.target && event.target.id === 'fsh-converter-form') {
+                     event.preventDefault(); // Prevent default only if it's our form
+
+                     const form = event.target;
+                     const submitBtn = form.querySelector('#submit-btn');
+                     const spinnerOverlay = document.getElementById('spinner-overlay'); // Spinner is outside the form
+
+                     if (!submitBtn || !spinnerOverlay) {
+                          console.error("Submit button or spinner overlay not found.");
+                          return; // Stop if critical elements missing
+                     }
+
+                     submitBtn.disabled = true;
+                     spinnerOverlay.classList.remove('d-none'); // Show spinner
+
+                     const formData = new FormData(form);
+                     try {
+                         const response = await fetch('{{ url_for('fsh_converter') }}', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData });
+                         if (!response.ok) { let errorText = response.statusText; try { const errorData = await response.json(); errorText = errorData.error || errorText; } catch (e) {} throw new Error(`Network response was not ok: ${response.status} ${errorText}`); }
+                         const html = await response.text();
+
+                         const themeNow = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+                         // Check function exists before calling, just in case
+                         if (typeof loadLottieAnimation === 'function') {
+                             loadLottieAnimation(themeNow); // Ensure animation theme is updated before showing result
+                         }
+
+                         outputContainer.innerHTML = html; // Replace content
+
+                         initializeFshConverterUI(outputContainer); // Re-initialize controls for new content
+
+                         // Hide spinner AFTER content replaced and potentially re-initialized
+                         spinnerOverlay.classList.add('d-none');
+
+                     } catch (error) {
+                         console.error('Error during FSH conversion AJAX:', error);
+                         if(spinnerOverlay) spinnerOverlay.classList.add('d-none');
+                         // No need to re-enable submitBtn as the form was replaced
+
+                         const alertDiv = document.createElement('div');
+                         alertDiv.className = 'alert alert-danger mt-4';
+                         alertDiv.textContent = `An error occurred during conversion: ${error.message}. Please check input and try again.`;
+                         outputContainer.innerHTML = ''; // Clear previous content before showing only error
+                         outputContainer.appendChild(alertDiv);
+                     }
+                 } // End if event target is form
+             }); // End submit listener
+         } else {
+              console.error("#fsh-output container not found for attaching delegated event listener.");
+         }
+    }); // End DOMContentLoaded Listener
+</script>
+{% endblock %}

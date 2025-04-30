@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% from "_form_helpers.html" import render_field %} {# Assuming you have this helper #}
+
+{% block content %}
+<div class="px-4 py-5 my-5 text-center">
+    <img class="d-block mx-auto mb-4" src="{{ url_for('static', filename='FHIRFLARE.png') }}" alt="FHIRFLARE IG Toolkit" width="192" height="192">
+    <h1 class="display-5 fw-bold text-body-emphasis">{{ title }}</h1>
+    <div class="col-lg-8 mx-auto">
+        <p class="lead mb-4">
+            Upload FHIR test data (JSON, XML, or ZIP containing JSON/XML) to a target server. The tool will attempt to parse resources, determine dependencies based on references, and upload them in the correct order. Optionally validate resources before uploading.
+        </p>
+    </div>
+</div>
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h4 class="my-0 fw-normal"><i class="bi bi-cloud-upload me-2"></i>Upload Configuration</h4>
+                </div>
+                <div class="card-body">
+                    {# --- Display WTForms validation errors --- #}
+                    {% if form.errors %}
+                        <div class="alert alert-danger">
+                            <p><strong>Please correct the following errors:</strong></p>
+                            <ul>
+                                {% for field, errors in form.errors.items() %}
+                                    <li>{{ form[field].label.text }}: {{ errors|join(', ') }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+                    {# --- End Error Display --- #}
+
+                    <form id="uploadTestDataForm" method="POST" enctype="multipart/form-data"> {# Use POST, JS will handle submission #}
+                        {{ form.csrf_token }} {# Render CSRF token #}
+
+                        {{ render_field(form.fhir_server_url, class="form-control form-control-lg") }}
+
+                        {# Authentication Row #}
+                        <div class="row g-3 mb-3 align-items-end">
+                            <div class="col-md-5">
+                                {{ render_field(form.auth_type, class="form-select") }}
+                            </div>
+                            <div class="col-md-7" id="authTokenGroup" style="display: none;">
+                                {{ render_field(form.auth_token, class="form-control") }}
+                            </div>
+                        </div>
+
+                        {# File Input #}
+                        {{ render_field(form.test_data_file, class="form-control") }}
+                        <small class="form-text text-muted">Select one or more .json, .xml files, or a single .zip file containing them.</small>
+
+                        {# --- Validation Options --- #}
+                        <div class="row g-3 mt-3 mb-3 align-items-center">
+                             <div class="col-md-6">
+                                {# Render BooleanField using the macro #}
+                                {{ render_field(form.validate_before_upload) }}
+                                <small class="form-text text-muted">It is suggested to not validate against more than 500 files</small>
+                             </div>
+                             <div class="col-md-6" id="validationPackageGroup" style="display: none;">
+                                {# Render SelectField using the macro #}
+                                {{ render_field(form.validation_package_id, class="form-select") }}
+                             </div>
+                        </div>
+                        {# --- END Validation Options --- #}
+
+                        {# Upload Mode/Error Handling/Conditional Row #}
+                        <div class="row g-3 mb-3">
+                             <div class="col-md-4">
+                                {{ render_field(form.upload_mode, class="form-select") }}
+                             </div>
+                             {# --- Conditional Upload Checkbox --- #}
+                             <div class="col-md-4 d-flex align-items-end"> {# Use flex alignment #}
+                                {{ render_field(form.use_conditional_uploads) }}
+                             </div>
+                             {# --- END --- #}
+                             <div class="col-md-4">
+                                {{ render_field(form.error_handling, class="form-select") }}
+                             </div>
+                        </div>
+
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100" id="uploadButton">
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="display: none;"></span>
+                            <i class="bi bi-arrow-up-circle me-2"></i>Upload and Process
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            {# Results Area #}
+            <div class="card shadow-sm">
+                 <div class="card-header">
+                    <h4 class="my-0 fw-normal"><i class="bi bi-terminal me-2"></i>Processing Log & Results</h4>
+                </div>
+                <div class="card-body">
+                    {# Live Console for Streaming Output #}
+                    <div id="liveConsole" class="border p-3 rounded bg-dark text-light mb-3" style="height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;">
+                        <span class="text-muted">Processing output will appear here...</span>
+                    </div>
+                     {# Final Summary Report Area #}
+                    <div id="uploadResponse" class="mt-3">
+                        {# Final summary message appears here #}
+                    </div>
+                </div>
+            </div>
+
+        </div> {# End Col #}
+    </div> {# End Row #}
+</div> {# End Container #}
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }} {# Include scripts from base.html #}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('uploadTestDataForm');
+    const uploadButton = document.getElementById('uploadButton');
+    const spinner = uploadButton ? uploadButton.querySelector('.spinner-border') : null;
+    const liveConsole = document.getElementById('liveConsole');
+    const responseDiv = document.getElementById('uploadResponse');
+    const authTypeSelect = document.getElementById('auth_type');
+    const authTokenGroup = document.getElementById('authTokenGroup');
+    const authTokenInput = document.getElementById('auth_token');
+    const fileInput = document.getElementById('test_data_file');
+    const validateCheckbox = document.getElementById('validate_before_upload');
+    const validationPackageGroup = document.getElementById('validationPackageGroup');
+    const validationPackageSelect = document.getElementById('validation_package_id');
+    const uploadModeSelect = document.getElementById('upload_mode'); // Get upload mode select
+    const conditionalUploadCheckbox = document.getElementById('use_conditional_uploads'); // Get conditional checkbox
+
+    // --- Helper: Sanitize text ---
+    const sanitizeText = (str) => str ? String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
+
+    // --- Event Listener: Show/Hide Auth Token ---
+    if (authTypeSelect && authTokenGroup) {
+        authTypeSelect.addEventListener('change', function() {
+            authTokenGroup.style.display = this.value === 'bearerToken' ? 'block' : 'none';
+            if (this.value !== 'bearerToken' && authTokenInput) authTokenInput.value = '';
+        });
+        authTokenGroup.style.display = authTypeSelect.value === 'bearerToken' ? 'block' : 'none'; // Initial state
+    } else { console.error("Auth elements not found."); }
+
+    // --- Event Listener: Show/Hide Validation Package Dropdown ---
+    if (validateCheckbox && validationPackageGroup) {
+        const toggleValidationPackage = () => {
+             validationPackageGroup.style.display = validateCheckbox.checked ? 'block' : 'none';
+        };
+        validateCheckbox.addEventListener('change', toggleValidationPackage);
+        toggleValidationPackage(); // Initial state
+    } else { console.error("Validation checkbox or package group not found."); }
+
+    // --- Event Listener: Enable/Disable Conditional Upload Checkbox ---
+    if (uploadModeSelect && conditionalUploadCheckbox) {
+        const toggleConditionalCheckbox = () => {
+            // Enable checkbox only if mode is 'individual'
+            conditionalUploadCheckbox.disabled = (uploadModeSelect.value !== 'individual');
+            // Optional: Uncheck if disabled
+            if (conditionalUploadCheckbox.disabled) {
+                conditionalUploadCheckbox.checked = false;
+            }
+        };
+        uploadModeSelect.addEventListener('change', toggleConditionalCheckbox);
+        toggleConditionalCheckbox(); // Initial state
+    } else { console.error("Upload mode select or conditional upload checkbox not found."); }
+
+
+    // --- Event Listener: Form Submission ---
+    if (form && uploadButton && spinner && liveConsole && responseDiv && fileInput && validateCheckbox && validationPackageSelect && conditionalUploadCheckbox) {
+        form.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            console.log("Form submitted");
+
+            // Basic validation
+            if (!fileInput.files || fileInput.files.length === 0) { alert('Please select at least one file.'); return; }
+            const fhirServerUrl = document.getElementById('fhir_server_url').value.trim();
+            if (!fhirServerUrl) { alert('Please enter the Target FHIR Server URL.'); return; }
+            if (validateCheckbox.checked && !validationPackageSelect.value) { alert('Please select a package for validation.'); return; }
+
+            // UI Updates
+            uploadButton.disabled = true;
+            if(spinner) spinner.style.display = 'inline-block';
+             const uploadIcon = uploadButton.querySelector('i');
+             if (uploadIcon) uploadIcon.style.display = 'none';
+            liveConsole.innerHTML = `<div>${new Date().toLocaleTimeString()} [INFO] Starting upload process...</div>`;
+            responseDiv.innerHTML = '';
+
+            // Prepare FormData
+            const formData = new FormData();
+            formData.append('fhir_server_url', fhirServerUrl);
+            formData.append('auth_type', authTypeSelect.value);
+            if (authTypeSelect.value === 'bearerToken' && authTokenInput) { formData.append('auth_token', authTokenInput.value); }
+            formData.append('upload_mode', uploadModeSelect.value);
+            formData.append('error_handling', document.getElementById('error_handling').value);
+            formData.append('validate_before_upload', validateCheckbox.checked ? 'true' : 'false');
+            if (validateCheckbox.checked) { formData.append('validation_package_id', validationPackageSelect.value); }
+            formData.append('use_conditional_uploads', conditionalUploadCheckbox.checked ? 'true' : 'false'); // Add new field
+
+            // Append files
+            for (let i = 0; i < fileInput.files.length; i++) { formData.append('test_data_files', fileInput.files[i]); }
+
+            // CSRF token and API key
+            const csrfTokenInput = form.querySelector('input[name="csrf_token"]');
+            const csrfToken = csrfTokenInput ? csrfTokenInput.value : "";
+            const internalApiKey = {{ api_key | default("") | tojson }};
+
+            try {
+                // --- API Call ---
+                const response = await fetch('/api/upload-test-data', {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/x-ndjson', 'X-CSRFToken': csrfToken, 'X-API-Key': internalApiKey },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    let errorMsg = `Upload failed: ${response.status} ${response.statusText}`;
+                    try { const errorData = await response.json(); errorMsg = errorData.message || JSON.stringify(errorData); } catch (e) {}
+                    throw new Error(errorMsg);
+                }
+                if (!response.body) { throw new Error("Response body missing."); }
+
+                // --- Process Streaming Response ---
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read(); if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n'); buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const data = JSON.parse(line); const timestamp = new Date().toLocaleTimeString();
+                            let messageClass = 'text-info'; let prefix = '[INFO]';
+
+                            // Handle message types including validation
+                            if (data.type === 'error') { prefix = '[ERROR]'; messageClass = 'text-danger'; }
+                            else if (data.type === 'success') { prefix = '[SUCCESS]'; messageClass = 'text-success'; }
+                            else if (data.type === 'warning') { prefix = '[WARNING]'; messageClass = 'text-warning'; }
+                            else if (data.type === 'progress') { prefix = '[PROGRESS]'; messageClass = 'text-light'; }
+                            else if (data.type === 'complete') { prefix = '[COMPLETE]'; messageClass = 'text-primary'; }
+                            else if (data.type === 'validation_info') { prefix = '[VALIDATION]'; messageClass = 'text-info'; }
+                            else if (data.type === 'validation_warning') { prefix = '[VALIDATION]'; messageClass = 'text-warning'; }
+                            else if (data.type === 'validation_error') { prefix = '[VALIDATION]'; messageClass = 'text-danger'; }
+
+                            // Append to console
+                            const messageDiv = document.createElement('div'); messageDiv.className = messageClass;
+                            let messageText = sanitizeText(data.message) || '...';
+                            if (data.details) { messageText += ` <small>(${sanitizeText(data.details)})</small>`; }
+                            messageDiv.innerHTML = `${timestamp} ${prefix} ${messageText}`;
+                            liveConsole.appendChild(messageDiv); liveConsole.scrollTop = liveConsole.scrollHeight;
+
+                            // Handle final summary
+                            if (data.type === 'complete' && data.data) {
+                                const summary = data.data;
+                                let alertClass = 'alert-secondary';
+                                if (summary.status === 'success') alertClass = 'alert-success';
+                                else if (summary.status === 'partial') alertClass = 'alert-warning';
+                                else if (summary.status === 'failure') alertClass = 'alert-danger';
+
+                                responseDiv.innerHTML = `
+                                    <div class="alert ${alertClass} mt-3">
+                                        <strong>Status: ${sanitizeText(summary.status)}</strong><br>
+                                        ${sanitizeText(summary.message)}<hr>
+                                        Files Processed: ${summary.files_processed ?? 'N/A'}<br>
+                                        Resources Parsed: ${summary.resources_parsed ?? 'N/A'}<br>
+                                        Validation Errors: ${summary.validation_errors ?? 'N/A'}<br>
+                                        Validation Warnings: ${summary.validation_warnings ?? 'N/A'}<br>
+                                        Resources Uploaded: ${summary.resources_uploaded ?? 'N/A'}<br>
+                                        Upload Errors: ${summary.error_count ?? 'N/A'}
+                                        ${summary.errors?.length > 0 ? '<br><strong>Details:</strong><ul>' + summary.errors.map(e => `<li>${sanitizeText(e)}</li>`).join('') + '</ul>' : ''}
+                                    </div>`;
+                            }
+                        } catch (parseError) { console.error('Stream parse error:', parseError, 'Line:', line); /* ... log error to console ... */ }
+                    } // end for line
+                } // end while
+
+                // Process final buffer (if needed)
+                 if (buffer.trim()) {
+                     try {
+                         const data = JSON.parse(buffer.trim());
+                         if (data.type === 'complete' && data.data) { /* ... update summary ... */ }
+                     } catch (parseError) { console.error('Final buffer parse error:', parseError); /* ... log error to console ... */ }
+                }
+
+            } catch (error) {
+                console.error("Upload failed:", error);
+                responseDiv.innerHTML = `<div class="alert alert-danger mt-3"><strong>Error:</strong> ${sanitizeText(error.message)}</div>`;
+                 const ts = new Date().toLocaleTimeString(); const errDiv = document.createElement('div'); errDiv.className = 'text-danger'; errDiv.textContent = `${ts} [CLIENT_ERROR] ${sanitizeText(error.message)}`; liveConsole.appendChild(errDiv);
+            } finally {
+                // Re-enable button
+                uploadButton.disabled = false;
+                if(spinner) spinner.style.display = 'none';
+                 const uploadIcon = uploadButton.querySelector('i');
+                 if (uploadIcon) uploadIcon.style.display = 'inline-block'; // Show icon
+            }
+        }); // End submit listener
+    } else { console.error("Could not find all required elements for form submission."); }
+
+}); // End DOMContentLoaded
+</script>
+{% endblock %}

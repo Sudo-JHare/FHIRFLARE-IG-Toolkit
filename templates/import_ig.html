@@ -1,20 +1,162 @@
 {% extends "base.html" %}
-
 {% from "_form_helpers.html" import render_field %}
 
 {% block content %}
 <div class="px-4 py-5 my-5 text-center">
-    <img class="d-block mx-auto mb-4" src="{{ url_for('static', filename='FHIRFLARE.png') }}" alt="FHIRFLARE Ig Toolkit" width="192" height="192">
+    <img class="d-block mx-auto mb-4" src="{{ url_for('static', filename='FHIRFLARE.png') }}" alt="FHIRFLARE IG Toolkit" width="192" height="192">
     <h1 class="display-5 fw-bold text-body-emphasis">Import FHIR Implementation Guides</h1>
     <div class="col-lg-6 mx-auto">
         <p class="lead mb-4">
             Import new FHIR Implementation Guides to the system for viewing.
         </p>
-        <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
-            <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg px-4 gap-3">Back to Home</a>
-            <a href="{{ url_for('view_igs') }}" class="btn btn-outline-secondary btn-lg px-4">View Downloaded IGs</a>
-            <a href="{{ url_for('push_igs') }}" class="btn btn-outline-secondary btn-lg px-4">Upload IG's</a>
+    </div>
+</div>
+
+<!-- Fire Animation Loading Overlay -->
+<div id="fire-loading-overlay" class="fire-loading-overlay d-none">
+    <div class="campfire">
+        <div class="sparks">
+            <div class="spark"></div>
+            <div class="spark"></div>
+            <div class="spark"></div>
+            <div class="spark"></div>
+            <div class="spark"></div>
+            <div class="spark"></div>
+            <div class="spark"></div>
+            <div class="spark"></div>
         </div>
+        <div class="logs">
+            <div class="log">
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+            </div>
+            <div class="log">
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+            </div>
+            <div class="log">
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+            </div>
+            <div class="log">
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+            </div>
+            <div class="log">
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+            </div>
+            <div class="log">
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+            </div>
+            <div class="log">
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+                <div class="streak"></div>
+            </div>
+        </div>
+        <div class="sticks">
+            <div class="stick"></div>
+            <div class="stick"></div>
+            <div class="stick"></div>
+            <div class="stick"></div>
+        </div>
+        <div class="fire">
+            <div class="fire__red">
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+            </div>
+            <div class="fire__orange">
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+            </div>
+            <div class="fire__yellow">
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+            </div>
+            <div class="fire__white">
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+                <div class="flame"></div>
+            </div>
+        </div>
+    </div>
+    <div class="text-center mt-3">
+        <p class="text-white mt-3">Importing Implementation Guide... Please wait.</p>
+        <p id="log-display" class="text-white mb-0"></p>
     </div>
 </div>
 
@@ -24,21 +166,13 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-body">
-                    <form method="POST" class="form">
+                    <form id="import-ig-form" method="POST" class="form">
                         {{ form.hidden_tag() }}
                         {{ render_field(form.package_name) }}
                         {{ render_field(form.package_version) }}
-                        <!-- Dependency Pulling Mode Toggle -->
-                        <div class="mb-3">
-                            <label for="dependency_mode" class="form-label">Dependency Pulling Mode:</label>
-                            <select class="form-select" id="dependency_mode" name="dependency_mode">
-                                <option value="recursive" selected>Current Recursive</option>
-                                <option value="patch-canonical">Patch Canonical Versions</option>
-                                <option value="tree-shaking">Tree Shaking (Only Used Dependencies)</option>
-                            </select>
-                        </div>
+                        {{ render_field(form.dependency_mode) }}
                         <div class="d-grid gap-2 d-sm-flex">
-                            {{ form.submit(class="btn btn-success") }}
+                            {{ form.submit(class="btn btn-success", id="submit-btn") }}
                             <a href="{{ url_for('index') }}" class="btn btn-secondary">Back</a>
                         </div>
                     </form>
@@ -47,4 +181,84 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('import-ig-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const loadingOverlay = document.getElementById('fire-loading-overlay');
+    const logDisplay = document.getElementById('log-display');
+
+    if (form && submitBtn && loadingOverlay && logDisplay) {
+        form.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            submitBtn.disabled = true;
+            logDisplay.textContent = 'Starting import...';
+            loadingOverlay.classList.remove('d-none');
+
+            let eventSource;
+            try {
+                // Start SSE connection for logs
+                eventSource = new EventSource('{{ url_for('stream_import_logs') }}');
+
+                eventSource.onmessage = function(event) {
+                    if (event.data === '[DONE]') {
+                        eventSource.close();
+                        return;
+                    }
+                    logDisplay.textContent = event.data;
+                };
+
+                eventSource.onerror = function() {
+                    console.error('SSE connection error');
+                    eventSource.close();
+                    logDisplay.textContent = 'Log streaming interrupted. Import may still be in progress.';
+                };
+            } catch (e) {
+                console.error('Failed to initialize SSE:', e);
+                logDisplay.textContent = 'Unable to stream logs: ' + e.message;
+            }
+
+            // Submit form via AJAX
+            const formData = new FormData(form);
+            try {
+                const response = await fetch('{{ url_for('import_ig') }}', {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: formData
+                });
+
+                if (eventSource) eventSource.close();
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.message || `HTTP error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (data.redirect) {
+                    window.location.href = data.redirect;
+                } else {
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert alert-success mt-3';
+                    alertDiv.textContent = data.message || 'Import successful!';
+                    form.parentElement.appendChild(alertDiv);
+                }
+            } catch (error) {
+                console.error('Import error:', error);
+                if (eventSource) eventSource.close();
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-danger mt-3';
+                alertDiv.textContent = `Import failed: ${error.message}`;
+                form.parentElement.appendChild(alertDiv);
+            } finally {
+                loadingOverlay.classList.add('d-none');
+                submitBtn.disabled = false;
+            }
+        });
+    } else {
+        console.error('Required elements missing: form, submit button, loading overlay, or log display.');
+    }
+});
+</script>
 {% endblock %}
