@@ -1,0 +1,855 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>FHIRFLARE IG Toolkit | Helm chart for deploying the fhirflare-ig-toolkit application</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="FHIRFLARE IG Toolkit" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Helm chart for deploying the fhirflare-ig-toolkit application" />
+<meta property="og:description" content="Helm chart for deploying the fhirflare-ig-toolkit application" />
+<meta property="og:site_name" content="FHIRFLARE IG Toolkit" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="FHIRFLARE IG Toolkit" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","description":"Helm chart for deploying the fhirflare-ig-toolkit application","headline":"FHIRFLARE IG Toolkit","url":"/README.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=b10d9a8cecb20165b91803f6b363103301de0984">
+    <script src="/assets/js/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header >
+        <h1>FHIRFLARE IG Toolkit</h1>
+        
+          <p>Helm chart for deploying the fhirflare-ig-toolkit application</p>
+        
+        <p class="view"><a href="https://github.com/Sudo-JHare/FHIRFLARE-IG-Toolkit">View the Project on GitHub <small></small></a></p>
+        <ul>
+        
+          <li><a href="https://github.com/Sudo-JHare/FHIRFLARE-IG-Toolkit/zipball/gh-pages">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/Sudo-JHare/FHIRFLARE-IG-Toolkit/tarball/gh-pages">Download <strong>TAR Ball</strong></a></li>
+        
+          <li><a href="https://github.com/Sudo-JHare/FHIRFLARE-IG-Toolkit">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+
+      <h1 id="fhirflare-ig-toolkit">FHIRFLARE IG Toolkit</h1>
+
+<p><img src="/static/FHIRFLARE.png" alt="FHIRFLARE Logo" /></p>
+
+<h2 id="overview">Overview</h2>
+
+<p>The FHIRFLARE IG Toolkit is a Flask-based web application designed to streamline the management, processing, validation, and deployment of FHIR Implementation Guides (IGs) and test data. It offers a user-friendly interface for importing IG packages, extracting metadata, validating FHIR resources or bundles, pushing IGs to FHIR servers, converting FHIR resources to FHIR Shorthand (FSH), uploading complex test data sets with dependency management, and retrieving/splitting FHIR bundles. The toolkit includes live consoles for real-time feedback, making it an essential tool for FHIR developers and implementers.</p>
+
+<p>The application can run in two modes:</p>
+
+<ul>
+  <li><strong>Standalone:</strong> Includes a Dockerized Flask frontend, SQLite database, and an embedded HAPI FHIR server for local validation and interaction.</li>
+  <li><strong>Lite:</strong> Includes only the Dockerized Flask frontend and SQLite database, excluding the local HAPI FHIR server. Requires connection to external FHIR servers for certain features.</li>
+</ul>
+
+<h2 id="installation-modes-lite-vs-standalone">Installation Modes (Lite vs. Standalone)</h2>
+
+<p>This toolkit offers two primary installation modes to suit different needs:</p>
+
+<ul>
+  <li><strong>Standalone Version:</strong>
+    <ul>
+      <li>Includes the full FHIRFLARE Toolkit application <strong>and</strong> an embedded HAPI FHIR server running locally within the Docker environment.</li>
+      <li>Allows for local FHIR resource validation using HAPI FHIR’s capabilities.</li>
+      <li>Enables the “Use Local HAPI” option in the FHIR API Explorer and FHIR UI Operations pages, proxying requests to the internal HAPI server (<code class="language-plaintext highlighter-rouge">http://localhost:8080/fhir</code>).</li>
+      <li>Requires Git and Maven during the initial build process (via the <code class="language-plaintext highlighter-rouge">.bat</code> script or manual steps) to prepare the HAPI FHIR server.</li>
+      <li>Ideal for users who want a self-contained environment for development and testing or who don’t have readily available external FHIR servers.</li>
+    </ul>
+  </li>
+  <li><strong>Lite Version:</strong>
+    <ul>
+      <li>Includes the FHIRFLARE Toolkit application <strong>without</strong> the embedded HAPI FHIR server.</li>
+      <li>Requires users to provide URLs for external FHIR servers when using features like the FHIR API Explorer and FHIR UI Operations pages. The “Use Local HAPI” option will be disabled in the UI.</li>
+      <li>Resource validation relies solely on local checks against downloaded StructureDefinitions, which may be less comprehensive than HAPI FHIR’s validation (e.g., for terminology bindings or complex invariants).</li>
+      <li><strong>Does not require Git or Maven</strong> for setup if using the <code class="language-plaintext highlighter-rouge">.bat</code> script or running the pre-built Docker image.</li>
+      <li>Ideal for users who primarily want to use the IG management, processing, and FSH conversion features, or who will always connect to existing external FHIR servers.</li>
+    </ul>
+  </li>
+</ul>
+
+<h2 id="features">Features</h2>
+
+<ul>
+  <li><strong>Import IGs:</strong> Download FHIR IG packages and dependencies from a package registry, supporting flexible version formats (e.g., <code class="language-plaintext highlighter-rouge">1.2.3</code>, <code class="language-plaintext highlighter-rouge">1.1.0-preview</code>, <code class="language-plaintext highlighter-rouge">current</code>) and dependency pulling modes (Recursive, Patch Canonical, Tree Shaking).</li>
+  <li><strong>Enhanced Package Search and Import:</strong>
+    <ul>
+      <li>Interactive page (<code class="language-plaintext highlighter-rouge">/search-and-import</code>) to search for FHIR IG packages from configured registries.</li>
+      <li>Displays package details, version history, dependencies, and dependents.</li>
+      <li>Utilizes a local database cache (<code class="language-plaintext highlighter-rouge">CachedPackage</code>) for faster subsequent searches.</li>
+      <li>Background task to refresh the package cache from registries (<code class="language-plaintext highlighter-rouge">/api/refresh-cache-task</code>).</li>
+      <li>Direct import from search results.</li>
+    </ul>
+  </li>
+  <li><strong>Manage IGs:</strong> View, process, unload, or delete downloaded IGs, with duplicate detection and resolution.</li>
+  <li><strong>Process IGs:</strong> Extract resource types, profiles, must-support elements, examples, and profile relationships (<code class="language-plaintext highlighter-rouge">structuredefinition-compliesWithProfile</code> and <code class="language-plaintext highlighter-rouge">structuredefinition-imposeProfile</code>).</li>
+  <li><strong>Validate FHIR Resources/Bundles:</strong> Validate single FHIR resources or bundles against selected IGs, with detailed error and warning reports (alpha feature). <em>Note: Lite version uses local SD checks only.</em></li>
+  <li><strong>Push IGs:</strong> Upload IG resources (and optionally dependencies) to a target FHIR server. Features include:
+    <ul>
+      <li>Real-time console output.</li>
+      <li>Authentication support (Bearer Token).</li>
+      <li>Filtering by resource type or specific files to skip.</li>
+      <li>Semantic comparison to skip uploading identical resources (override with <strong>Force Upload</strong> option).</li>
+      <li>Correct handling of canonical resources (searching by URL/version before deciding POST/PUT).</li>
+      <li>Dry run mode for simulation.</li>
+      <li>Verbose logging option.</li>
+    </ul>
+  </li>
+  <li><strong>Upload Test Data:</strong> Upload complex sets of test data (individual JSON/XML files or ZIP archives) to a target FHIR server. Features include:
+    <ul>
+      <li>Robust parsing of JSON and XML (using <code class="language-plaintext highlighter-rouge">fhir.resources</code> library when available).</li>
+      <li>Automatic dependency analysis based on resource references within the uploaded set.</li>
+      <li>Topological sorting to ensure resources are uploaded in the correct order.</li>
+      <li>Cycle detection in dependencies.</li>
+      <li>Choice of individual resource uploads or a single transaction bundle.</li>
+      <li><strong>Optional Pre-Upload Validation:</strong> Validate resources against a selected profile package before uploading.</li>
+      <li><strong>Optional Conditional Uploads (Individual Mode):</strong> Check resource existence (GET) and use conditional <code class="language-plaintext highlighter-rouge">If-Match</code> headers for updates (PUT) or create resources (PUT/POST). Falls back to simple PUT if unchecked.</li>
+      <li>Configurable error handling (stop on first error or continue).</li>
+      <li>Authentication support (Bearer Token).</li>
+      <li>Streaming progress log via the UI.</li>
+      <li>Handles large numbers of files using a custom form parser.</li>
+    </ul>
+  </li>
+  <li><strong>Profile Relationships:</strong> Display and validate <code class="language-plaintext highlighter-rouge">compliesWithProfile</code> and <code class="language-plaintext highlighter-rouge">imposeProfile</code> extensions in the UI (configurable).</li>
+  <li><strong>FSH Converter:</strong> Convert FHIR JSON/XML resources to FHIR Shorthand (FSH) using GoFSH, with advanced options (Package context, Output styles, Log levels, FHIR versions, Fishing Trip, Dependencies, Indentation, Meta Profile handling, Alias File, No Alias). Includes a waiting spinner.</li>
+  <li><strong>Retrieve and Split Bundles:</strong>
+    <ul>
+      <li>Retrieve specified resource types as bundles from a FHIR server.</li>
+      <li>Optionally fetch referenced resources, either individually or as full bundles for each referenced type.</li>
+      <li>Split uploaded ZIP files containing bundles into individual resource JSON files.</li>
+      <li>Download retrieved/split resources as a ZIP archive.</li>
+      <li>Streaming progress log via the UI for retrieval operations.</li>
+    </ul>
+  </li>
+  <li><strong>FHIR Interaction UIs:</strong> Explore FHIR server capabilities and interact with resources using the “FHIR API Explorer” (simple GET/POST/PUT/DELETE) and “FHIR UI Operations” (Swagger-like interface based on CapabilityStatement). <em>Note: Lite version requires custom server URLs.</em></li>
+  <li><strong>HAPI FHIR Configuration (Standalone Mode):</strong>
+    <ul>
+      <li>A dedicated page (<code class="language-plaintext highlighter-rouge">/config-hapi</code>) to view and edit the <code class="language-plaintext highlighter-rouge">application.yaml</code> configuration for the embedded HAPI FHIR server.</li>
+      <li>Allows modification of HAPI FHIR properties directly from the UI.</li>
+      <li>Option to restart the HAPI FHIR server (Tomcat) to apply changes.</li>
+    </ul>
+  </li>
+  <li><strong>API Support:</strong> RESTful API endpoints for importing, pushing, retrieving metadata, validating, uploading test data, and retrieving/splitting bundles.</li>
+  <li><strong>Live Console:</strong> Real-time logs for push, validation, upload test data, FSH conversion, and bundle retrieval operations.</li>
+  <li><strong>Configurable Behavior:</strong> Control validation modes, display options via <code class="language-plaintext highlighter-rouge">app.config</code>.</li>
+  <li><strong>Theming:</strong> Supports light and dark modes.</li>
+</ul>
+
+<h2 id="technology-stack">Technology Stack</h2>
+
+<ul>
+  <li>Python 3.12+, Flask 2.3.3, Flask-SQLAlchemy 3.0.5, Flask-WTF 1.2.1</li>
+  <li>Jinja2, Bootstrap 5.3.3, JavaScript (ES6), Lottie-Web 5.12.2</li>
+  <li>SQLite</li>
+  <li>Docker, Docker Compose, Supervisor</li>
+  <li>Node.js 18+ (for GoFSH/SUSHI), GoFSH, SUSHI</li>
+  <li>HAPI FHIR (Standalone version only)</li>
+  <li>Requests 2.31.0, Tarfile, Logging, Werkzeug</li>
+  <li>fhir.resources (optional, for robust XML parsing)</li>
+</ul>
+
+<h2 id="prerequisites">Prerequisites</h2>
+
+<ul>
+  <li><strong>Docker:</strong> Required for containerized deployment (both versions).</li>
+  <li><strong>Git &amp; Maven:</strong> Required <strong>only</strong> for building the <strong>Standalone</strong> version from source using the <code class="language-plaintext highlighter-rouge">.bat</code> script or manual steps. Not required for the Lite version build or for running pre-built Docker Hub images.</li>
+  <li><strong>Windows:</strong> Required if using the <code class="language-plaintext highlighter-rouge">.bat</code> scripts.</li>
+</ul>
+
+<h2 id="setup-instructions">Setup Instructions</h2>
+
+<h3 id="running-pre-built-images-general-users">Running Pre-built Images (General Users)</h3>
+
+<p>This is the easiest way to get started without needing Git or Maven. Choose the version you need:</p>
+
+<p><strong>Lite Version (No local HAPI FHIR):</strong></p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Pull the latest Lite image</span>
+docker pull ghcr.io/sudo-jhare/fhirflare-ig-toolkit-lite:latest
+
+<span class="c"># Run the Lite version (maps port 5000 for the UI)</span>
+<span class="c"># You'll need to create local directories for persistent data first:</span>
+<span class="c"># mkdir instance logs static static/uploads instance/hapi-h2-data</span>
+docker run <span class="nt">-d</span> <span class="se">\</span>
+  <span class="nt">-p</span> 5000:5000 <span class="se">\</span>
+  <span class="nt">-v</span> ./instance:/app/instance <span class="se">\</span>
+  <span class="nt">-v</span> ./static/uploads:/app/static/uploads <span class="se">\</span>
+  <span class="nt">-v</span> ./instance/hapi-h2-data:/app/h2-data <span class="se">\</span>
+  <span class="nt">-v</span> ./logs:/app/logs <span class="se">\</span>
+  <span class="nt">--name</span> fhirflare-lite <span class="se">\</span>
+  ghcr.io/sudo-jhare/fhirflare-ig-toolkit-lite:latest
+Standalone Version <span class="o">(</span>Includes <span class="nb">local </span>HAPI FHIR<span class="o">)</span>:
+</code></pre></div></div>
+<p>Bash</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Pull the latest Standalone image</span>
+docker pull ghcr.io/sudo-jhare/fhirflare-ig-toolkit-standalone:latest
+
+<span class="c"># Run the Standalone version (maps ports 5000 and 8080)</span>
+<span class="c"># You'll need to create local directories for persistent data first:</span>
+<span class="c"># mkdir instance logs static static/uploads instance/hapi-h2-data</span>
+docker run <span class="nt">-d</span> <span class="se">\</span>
+  <span class="nt">-p</span> 5000:5000 <span class="se">\</span>
+  <span class="nt">-p</span> 8080:8080 <span class="se">\</span>
+  <span class="nt">-v</span> ./instance:/app/instance <span class="se">\</span>
+  <span class="nt">-v</span> ./static/uploads:/app/static/uploads <span class="se">\</span>
+  <span class="nt">-v</span> ./instance/hapi-h2-data:/app/h2-data <span class="se">\</span>
+  <span class="nt">-v</span> ./logs:/app/logs <span class="se">\</span>
+  <span class="nt">--name</span> fhirflare-standalone <span class="se">\</span>
+  ghcr.io/sudo-jhare/fhirflare-ig-toolkit-standalone:latest
+</code></pre></div></div>
+
+<p>Building from Source (Developers)
+Using Windows .bat Scripts (Standalone Version Only):</p>
+
+<p>First Time Setup:</p>
+
+<p>Run Build and Run for first time.bat:</p>
+
+<p>Code snippet</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">cd</span> <span class="s2">"&lt;project folder&gt;"</span>
+git clone <span class="o">[</span>https://github.com/hapifhir/hapi-fhir-jpaserver-starter.git]<span class="o">(</span>https://github.com/hapifhir/hapi-fhir-jpaserver-starter.git<span class="o">)</span> hapi-fhir-jpaserver
+copy .<span class="se">\\</span>hapi-fhir-Setup<span class="se">\\</span>target<span class="se">\\</span>classes<span class="se">\\</span>application.yaml .<span class="se">\\</span>hapi-fhir-jpaserver<span class="se">\\</span>target<span class="se">\\</span>classes<span class="se">\\</span>application.yaml
+mvn clean package <span class="nt">-DskipTests</span><span class="o">=</span><span class="nb">true</span> <span class="nt">-Pboot</span>
+docker-compose build <span class="nt">--no-cache</span>
+docker-compose up <span class="nt">-d</span>
+</code></pre></div></div>
+
+<p>This clones the HAPI FHIR server, copies configuration, builds the project, and starts the containers.</p>
+
+<p>Subsequent Runs:</p>
+
+<p>Run Run.bat:</p>
+
+<p>Code snippet</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">cd</span> <span class="s2">"&lt;project folder&gt;"</span>
+docker-compose up <span class="nt">-d</span>
+</code></pre></div></div>
+<p>This starts the Flask app (port 5000) and HAPI FHIR server (port 8080).</p>
+
+<p>Access the Application:</p>
+
+<ul>
+  <li>Flask UI: http://localhost:5000</li>
+  <li>HAPI FHIR server: http://localhost:8080</li>
+  <li>Manual Setup (Linux/MacOS/Windows):</li>
+</ul>
+
+<p>Preparation (Standalone Version Only):</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">cd</span> &lt;project folder&gt;
+git clone <span class="o">[</span>https://github.com/hapifhir/hapi-fhir-jpaserver-starter.git]<span class="o">(</span>https://github.com/hapifhir/hapi-fhir-jpaserver-starter.git<span class="o">)</span> hapi-fhir-jpaserver
+<span class="nb">cp</span> ./hapi-fhir-Setup/target/classes/application.yaml ./hapi-fhir-jpaserver/target/classes/application.yaml
+</code></pre></div></div>
+
+<p>Build:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Build HAPI FHIR (Standalone Version Only)</span>
+mvn clean package <span class="nt">-DskipTests</span><span class="o">=</span><span class="nb">true</span> <span class="nt">-Pboot</span>
+
+<span class="c"># Build Docker Image (Specify APP_MODE=lite in docker-compose.yml for Lite version)</span>
+docker-compose build <span class="nt">--no-cache</span>
+</code></pre></div></div>
+
+<p>Run:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker-compose up <span class="nt">-d</span>
+Access the Application:
+</code></pre></div></div>
+
+<ul>
+  <li>Flask UI: http://localhost:5000</li>
+  <li>HAPI FHIR server (Standalone only): http://localhost:8080</li>
+  <li>Local Development (Without Docker):</li>
+</ul>
+
+<p>Clone the Repository:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>git clone <span class="o">[</span>https://github.com/Sudo-JHare/FHIRFLARE-IG-Toolkit.git]<span class="o">(</span>https://github.com/Sudo-JHare/FHIRFLARE-IG-Toolkit.git<span class="o">)</span>
+<span class="nb">cd </span>FHIRFLARE-IG-Toolkit
+</code></pre></div></div>
+
+<p>Install Dependencies:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>python <span class="nt">-m</span> venv venv
+<span class="nb">source </span>venv/bin/activate  <span class="c"># On Windows: venv\Scripts\activate</span>
+pip <span class="nb">install</span> <span class="nt">-r</span> requirements.txt
+</code></pre></div></div>
+
+<p>Install Node.js, GoFSH, and SUSHI (for FSH Converter):</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Example for Debian/Ubuntu</span>
+curl <span class="nt">-fsSL</span> <span class="o">[</span>https://deb.nodesource.com/setup_18.x]<span class="o">(</span>https://deb.nodesource.com/setup_18.x<span class="o">)</span> | <span class="nb">sudo </span>bash -
+<span class="nb">sudo </span>apt-get <span class="nb">install</span> <span class="nt">-y</span> nodejs
+<span class="c"># Install globally</span>
+npm <span class="nb">install</span> <span class="nt">-g</span> gofsh fsh-sushi
+Set Environment Variables:
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">export </span><span class="nv">FLASK_SECRET_KEY</span><span class="o">=</span><span class="s1">'your-secure-secret-key'</span>
+<span class="nb">export </span><span class="nv">API_KEY</span><span class="o">=</span><span class="s1">'your-api-key'</span>
+<span class="c"># Optional: Set APP_MODE to 'lite' if desired</span>
+<span class="c"># export APP_MODE='lite'</span>
+</code></pre></div></div>
+
+<p>Initialize Directories:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">mkdir</span> <span class="nt">-p</span> instance static/uploads logs
+<span class="c"># Ensure write permissions if needed</span>
+<span class="c"># chmod -R 777 instance static/uploads logs</span>
+</code></pre></div></div>
+
+<p>Run the Application:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">export </span><span class="nv">FLASK_APP</span><span class="o">=</span>app.py
+flask run
+</code></pre></div></div>
+<p>Access at http://localhost:5000.</p>
+
+<p>Usage
+Import an IG</p>
+<h3 id="search-view-details-and-import-packages">Search, View Details, and Import Packages</h3>
+<p>Navigate to <strong>Search and Import Packages</strong> (<code class="language-plaintext highlighter-rouge">/search-and-import</code>).</p>
+<ol>
+  <li>The page will load a list of available FHIR Implementation Guide packages from a local cache or by fetching from configured registries.
+    <ul>
+      <li>A loading animation and progress messages are shown if fetching from registries.</li>
+      <li>The timestamp of the last cache update is displayed.</li>
+    </ul>
+  </li>
+  <li>Use the search bar to filter packages by name or author.</li>
+  <li>Packages are paginated for easier Browse.</li>
+  <li>For each package, you can:
+    <ul>
+      <li>View its latest official and absolute versions.</li>
+      <li>Click on the package name to navigate to a <strong>detailed view</strong> (<code class="language-plaintext highlighter-rouge">/package-details/&lt;name&gt;</code>) showing:
+        <ul>
+          <li>Comprehensive metadata (author, FHIR version, canonical URL, description).</li>
+          <li>A full list of available versions with publication dates.</li>
+          <li>Declared dependencies.</li>
+          <li>Other packages that depend on it (dependents).</li>
+          <li>Version history (logs).</li>
+        </ul>
+      </li>
+      <li>Directly import a specific version using the “Import” button on the search page or the details page.</li>
+    </ul>
+  </li>
+  <li><strong>Cache Management:</strong>
+    <ul>
+      <li>A “Clear &amp; Refresh Cache” button is available to trigger a background task (<code class="language-plaintext highlighter-rouge">/api/refresh-cache-task</code>) that clears the local database and in-memory cache and fetches the latest package information from all configured registries. Progress is shown via a live log.</li>
+    </ul>
+  </li>
+</ol>
+
+<ul>
+  <li>Enter a package name (e.g., hl7.fhir.au.core) and version (e.g., 1.1.0-preview).</li>
+  <li>Choose a dependency mode:</li>
+  <li>Current Recursive: Import all dependencies listed in package.json recursively.</li>
+  <li>Patch Canonical Versions: Import only canonical FHIR packages (e.g., hl7.fhir.r4.core).</li>
+  <li>Tree Shaking: Import only dependencies containing resources actually used by the main package.</li>
+  <li>Click Import to download the package and dependencies.</li>
+</ul>
+
+<p>Manage IGs
+Go to Manage FHIR Packages (/view-igs) to view downloaded and processed IGs.</p>
+
+<p>Actions:</p>
+<ul>
+  <li>Process: Extract metadata (resource types, profiles, must-support elements, examples).</li>
+  <li>Unload: Remove processed IG data from the database.</li>
+  <li>Delete: Remove package files from the filesystem.</li>
+</ul>
+
+<p>Duplicates are highlighted for resolution.</p>
+
+<p>View Processed IGs</p>
+
+<p>After processing, view IG details (/view-ig/<id>), including:</id></p>
+
+<ul>
+  <li>Resource types and profiles.</li>
+  <li>Must-support elements and examples.</li>
+  <li>Profile relationships (compliesWithProfile, imposeProfile) if enabled (DISPLAY_PROFILE_RELATIONSHIPS).</li>
+</ul>
+
+<p>Interactive StructureDefinition viewer (Differential, Snapshot, Must Support, Key Elements, Constraints, Terminology, Search Params).</p>
+<ul>
+  <li>Validate FHIR Resources/Bundles</li>
+  <li>Navigate to Validate FHIR Sample (/validate-sample).</li>
+</ul>
+
+<p>Select a package (e.g., hl7.fhir.au.core#1.1.0-preview).</p>
+
+<ul>
+  <li>Choose Single Resource or Bundle mode.</li>
+  <li>Paste or upload FHIR JSON/XML (e.g., a Patient resource).</li>
+  <li>Submit to view validation errors/warnings. Note: Alpha feature; report issues to GitHub (remove PHI).</li>
+  <li>Push IGs to a FHIR Server</li>
+  <li>Go to Push IGs (/push-igs).</li>
+</ul>
+
+<p>Select a downloaded package.</p>
+
+<ul>
+  <li>Enter the Target FHIR Server URL.</li>
+  <li>Configure Authentication (None, Bearer Token).</li>
+  <li>Choose options: Include Dependencies, Force Upload (skips comparison check), Dry Run, Verbose Log.</li>
+  <li>Optionally filter by Resource Types (comma-separated) or Skip Specific Files (paths within package, comma/newline separated).</li>
+  <li>Click Push to FHIR Server to upload resources. Canonical resources are checked before upload. Identical resources are skipped unless Force Upload is checked.</li>
+  <li>Monitor progress in the live console.</li>
+  <li>Upload Test Data</li>
+  <li>Navigate to Upload Test Data (/upload-test-data).</li>
+  <li>Enter the Target FHIR Server URL.</li>
+  <li>Configure Authentication (None, Bearer Token).</li>
+  <li>Select one or more .json, .xml files, or a single .zip file containing test resources.</li>
+  <li>Optionally check Validate Resources Before Upload? and select a Validation Profile Package.</li>
+  <li>Choose Upload Mode:</li>
+  <li>Individual Resources: Uploads each resource one by one in dependency order.</li>
+  <li>Transaction Bundle: Uploads all resources in a single transaction.</li>
+  <li>Optionally check Use Conditional Upload (Individual Mode Only)? to use If-Match headers for updates.</li>
+  <li>Choose Error Handling:</li>
+  <li>Stop on First Error: Halts the process if any validation or upload fails.</li>
+  <li>Continue on Error: Reports errors but attempts to process/upload remaining resources.</li>
+  <li>Click Upload and Process. The tool parses files, optionally validates, analyzes dependencies, topologically sorts resources, and uploads them according to selected options.</li>
+  <li>Monitor progress in the streaming log output.</li>
+</ul>
+
+<p>Convert FHIR to FSH</p>
+<ul>
+  <li>Navigate to FSH Converter (/fsh-converter).</li>
+</ul>
+
+<p>Optionally select a package for context (e.g., hl7.fhir.au.core#1.1.0-preview).
+Choose input mode:
+Upload File: Upload a FHIR JSON/XML file.
+Paste Text: Paste FHIR JSON/XML content.
+Configure options:
+Output Style: file-per-definition, group-by-fsh-type, group-by-profile, single-file.
+Log Level: error, warn, info, debug.
+FHIR Version: R4, R4B, R5, or auto-detect.
+Fishing Trip: Enable round-trip validation with SUSHI, generating a comparison report.
+Dependencies: Specify additional packages (e.g., hl7.fhir.us.core@6.1.0, one per line).
+Indent Rules: Enable context path indentation for readable FSH.
+Meta Profile: Choose only-one, first, or none for meta.profile handling.
+Alias File: Upload an FSH file with aliases (e.g., $MyAlias = http://example.org).
+No Alias: Disable automatic alias generation.
+Click Convert to FSH to generate and display FSH output, with a waiting spinner (light/dark theme) during processing.
+If Fishing Trip is enabled, view the comparison report via the “Click here for SUSHI Validation” badge button.
+Download the result as a .fsh file.
+Retrieve and Split Bundles
+Navigate to Retrieve/Split Data (/retrieve-split-data).</p>
+
+<p>Retrieve Bundles from Server:</p>
+
+<ul>
+  <li>Enter the FHIR Server URL (defaults to the proxy if empty).</li>
+  <li>Select one or more Resource Types to retrieve (e.g., Patient, Observation).</li>
+  <li>Optionally check Fetch Referenced Resources.</li>
+  <li>If checked, further optionally check Fetch Full Reference Bundles to retrieve entire bundles for each referenced type (e.g., all Patients if a Patient is referenced) instead of individual resources by ID.</li>
+  <li>Click Retrieve Bundles.</li>
+  <li>Monitor progress in the streaming log. A ZIP file containing the retrieved bundles/resources will be prepared for download.</li>
+</ul>
+
+<p>Split Uploaded Bundles:</p>
+
+<ul>
+  <li>Upload a ZIP file containing FHIR bundles (JSON format).</li>
+  <li>Click Split Bundles.</li>
+  <li>A ZIP file containing individual resources extracted from the bundles will be prepared for download.</li>
+  <li>Explore FHIR Operations</li>
+  <li>Navigate to FHIR UI Operations (/fhir-ui-operations).</li>
+</ul>
+
+<p>Toggle between local HAPI (/fhir) or a custom FHIR server.</p>
+
+<ul>
+  <li>Click Fetch Metadata to load the server’s CapabilityStatement.</li>
+  <li>Select a resource type (e.g., Patient, Observation) or System to view operations:</li>
+  <li>System operations: GET /metadata, POST /, GET /_history, GET/POST /$diff, POST /$reindex, POST /$expunge, etc.</li>
+  <li>Resource operations: GET Patient/:id, POST Observation/_search, etc.</li>
+  <li>Use Try it out to input parameters or request bodies, then Execute to view results in JSON, XML, or narrative formats.</li>
+</ul>
+
+<h3 id="configure-embedded-hapi-fhir-server-standalone-mode">Configure Embedded HAPI FHIR Server (Standalone Mode)</h3>
+<p>For users running the <strong>Standalone version</strong>, which includes an embedded HAPI FHIR server.</p>
+<ol>
+  <li>Navigate to <strong>Configure HAPI FHIR</strong> (<code class="language-plaintext highlighter-rouge">/config-hapi</code>).</li>
+  <li>The page displays the content of the HAPI FHIR server’s <code class="language-plaintext highlighter-rouge">application.yaml</code> file.</li>
+  <li>You can edit the configuration directly in the text area.
+    <ul>
+      <li><em>Caution: Incorrect modifications can break the HAPI FHIR server.</em></li>
+    </ul>
+  </li>
+  <li>Click <strong>Save Configuration</strong> to apply your changes to the <code class="language-plaintext highlighter-rouge">application.yaml</code> file.</li>
+  <li>Click <strong>Restart Tomcat</strong> to restart the HAPI FHIR server and load the new configuration. The restart process may take a few moments.</li>
+</ol>
+
+<p>API Usage
+Import IG
+Bash</p>
+
+<p>curl -X POST http://localhost:5000/api/import-ig <br />
+-H “Content-Type: application/json” <br />
+-H “X-API-Key: your-api-key” <br />
+-d ‘{“package_name”: “hl7.fhir.au.core”, “version”: “1.1.0-preview”, “dependency_mode”: “recursive”}’
+Returns complies_with_profiles, imposed_profiles, and duplicate_packages_present info.</p>
+
+<h3 id="refresh-package-cache-background-task">Refresh Package Cache (Background Task)</h3>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-X</span> POST http://localhost:5000/api/refresh-cache-task <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"X-API-Key: your-api-key"</span>
+</code></pre></div></div>
+
+<p>Push IG
+Bash</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-X</span> POST http://localhost:5000/api/push-ig <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"Content-Type: application/json"</span> <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"Accept: application/x-ndjson"</span> <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"X-API-Key: your-api-key"</span> <span class="se">\</span>
+<span class="nt">-d</span> <span class="s1">'{
+      "package_name": "hl7.fhir.au.core",
+      "version": "1.1.0-preview",
+      "fhir_server_url": "http://localhost:8080/fhir",
+      "include_dependencies": true,
+      "force_upload": false,
+      "dry_run": false,
+      "verbose": false,
+      "auth_type": "none"
+    }'</span>
+</code></pre></div></div>
+
+<p>Returns a streaming NDJSON response with progress and final summary.</p>
+
+<p>Upload Test Data
+Bash</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-X</span> POST http://localhost:5000/api/upload-test-data <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"X-API-Key: your-api-key"</span> <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"Accept: application/x-ndjson"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"fhir_server_url=http://your-fhir-server/fhir"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"auth_type=bearerToken"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"auth_token=YOUR_TOKEN"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"upload_mode=individual"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"error_handling=continue"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"validate_before_upload=true"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"validation_package_id=hl7.fhir.r4.core#4.0.1"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"use_conditional_uploads=true"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"test_data_files=@/path/to/your/patient.json"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"test_data_files=@/path/to/your/observations.zip"</span>
+</code></pre></div></div>
+
+<p>Returns a streaming NDJSON response with progress and final summary. Uses multipart/form-data for file uploads.</p>
+
+<p>Retrieve Bundles
+Bash</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-X</span> POST http://localhost:5000/api/retrieve-bundles <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"X-API-Key: your-api-key"</span> <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"Accept: application/x-ndjson"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"fhir_server_url=http://your-fhir-server/fhir"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"resources=Patient"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"resources=Observation"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"validate_references=true"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"fetch_reference_bundles=false"</span>
+</code></pre></div></div>
+
+<p>Returns a streaming NDJSON response with progress. The X-Zip-Path header in the final response part will contain the path to download the ZIP archive (e.g., /tmp/retrieved_bundles_datetime.zip).</p>
+
+<p>Split Bundles
+Bash</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-X</span> POST http://localhost:5000/api/split-bundles <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"X-API-Key: your-api-key"</span> <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"Accept: application/x-ndjson"</span> <span class="se">\</span>
+<span class="nt">-F</span> <span class="s2">"split_bundle_zip_path=@/path/to/your/bundles.zip"</span>
+</code></pre></div></div>
+
+<p>Returns a streaming NDJSON response. The X-Zip-Path header in the final response part will contain the path to download the ZIP archive of split resources.</p>
+
+<p>Validate Resource/Bundle
+Not yet exposed via API; use the UI at /validate-sample.</p>
+
+<p>Configuration Options
+Located in app.py:</p>
+
+<ul>
+  <li>VALIDATE_IMPOSED_PROFILES: (Default: True) Validates resources against imposed profiles during push.</li>
+  <li>DISPLAY_PROFILE_RELATIONSHIPS: (Default: True) Shows compliesWithProfile and imposeProfile in the UI.</li>
+  <li>FHIR_PACKAGES_DIR: (Default: /app/instance/fhir_packages) Stores .tgz packages and metadata.</li>
+  <li>UPLOAD_FOLDER: (Default: /app/static/uploads) Stores GoFSH output files and FSH comparison reports.</li>
+  <li>SECRET_KEY: Required for CSRF protection and sessions. Set via environment variable or directly.</li>
+  <li>API_KEY: Required for API authentication. Set via environment variable or directly.</li>
+  <li>MAX_CONTENT_LENGTH: (Default: Flask default) Max size for HTTP request body (e.g., 16 * 1024 * 1024 for 16MB). Important for large uploads.</li>
+  <li>MAX_FORM_PARTS: (Default: Werkzeug default, often 1000) Default max number of form parts. Overridden for /api/upload-test-data by CustomFormDataParser.</li>
+</ul>
+
+<h3 id="get-hapi-fhir-configuration-standalone-mode">Get HAPI FHIR Configuration (Standalone Mode)</h3>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-X</span> GET http://localhost:5000/api/config <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"X-API-Key: your-api-key"</span>
+</code></pre></div></div>
+<p>Save HAPI FHIR Configuration:</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-X</span> POST http://localhost:5000/api/config <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"Content-Type: application/json"</span> <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"X-API-Key: your-api-key"</span> <span class="se">\</span>
+<span class="nt">-d</span> <span class="s1">'{"your_yaml_key": "your_value", ...}'</span> <span class="c"># Send the full YAML content as JSON</span>
+</code></pre></div></div>
+<p>Restart HAPI FHIR Server:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-X</span> POST http://localhost:5000/api/restart-tomcat <span class="se">\</span>
+<span class="nt">-H</span> <span class="s2">"X-API-Key: your-api-key"</span>
+</code></pre></div></div>
+
+<p>Testing
+The project includes a test suite covering UI, API, database, file operations, and security.</p>
+
+<p>Test Prerequisites:</p>
+
+<p>pytest: For running tests.
+pytest-mock: For mocking dependencies. Install: pip install pytest pytest-mock
+Running Tests:</p>
+
+<p>Bash</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">cd</span> &lt;project folder&gt;
+pytest tests/test_app.py <span class="nt">-v</span>
+</code></pre></div></div>
+<p>Test Coverage:</p>
+
+<ul>
+  <li>UI Pages: Homepage, Import IG, Manage IGs, Push IGs, Validate Sample, View Processed IG, FSH Converter, Upload Test Data, Retrieve/Split Data.</li>
+  <li>API Endpoints: POST /api/import-ig, POST /api/push-ig, GET /get-structure, GET /get-example, POST /api/upload-test-data, POST /api/retrieve-bundles, POST /api/split-bundles.</li>
+  <li>Database: IG processing, unloading, viewing.</li>
+  <li>File Operations: Package processing, deletion, FSH output, ZIP handling.</li>
+  <li>Security: CSRF protection, flash messages, secret key.</li>
+  <li>FSH Converter: Form submission, file/text input, GoFSH execution, Fishing Trip comparison.</li>
+  <li>Upload Test Data: Parsing, dependency graph, sorting, upload modes, validation, conditional uploads.</li>
+</ul>
+
+<p>Development Notes</p>
+
+<p>Background</p>
+
+<p>The toolkit addresses the need for a comprehensive FHIR IG management tool, with recent enhancements for resource validation, FSH conversion with advanced GoFSH features, flexible versioning, improved IG pushing, dependency-aware test data uploading, and bundle retrieval/splitting, making it a versatile platform for FHIR developers.</p>
+
+<p>Technical Decisions</p>
+
+<ul>
+  <li>Flask: Lightweight and flexible for web development.</li>
+  <li>SQLite: Simple for development; consider PostgreSQL for production.</li>
+  <li>Bootstrap 5.3.3: Responsive UI with custom styling.</li>
+  <li>Lottie-Web: Renders themed animations for FSH conversion waiting spinner.</li>
+  <li>GoFSH/SUSHI: Integrated via Node.js for advanced FSH conversion and round-trip validation.</li>
+  <li>Docker: Ensures consistent deployment with Flask and HAPI FHIR.</li>
+  <li>Flexible Versioning: Supports non-standard IG versions (e.g., -preview, -ballot).</li>
+  <li>Live Console/Streaming: Real-time feedback for complex operations (Push, Upload Test Data, FSH, Retrieve Bundles).</li>
+  <li>Validation: Alpha feature with ongoing FHIRPath improvements.</li>
+  <li>Dependency Management: Uses topological sort for Upload Test Data feature.</li>
+  <li>Form Parsing: Uses custom Werkzeug parser for Upload Test Data to handle large numbers of files.</li>
+</ul>
+
+<p>Recent Updates</p>
+
+<ul>
+  <li>Enhanced package search page with caching, detailed views (dependencies, dependents, version history), and background cache refresh.</li>
+  <li>Upload Test Data Enhancements (April 2025):</li>
+  <li>Added optional Pre-Upload Validation against selected IG profiles.</li>
+  <li>Added optional Conditional Uploads (GET + POST/PUT w/ If-Match) for individual mode.</li>
+  <li>Implemented robust XML parsing using fhir.resources library (when available).</li>
+  <li>Fixed 413 Request Entity Too Large errors for large file counts using a custom Werkzeug FormDataParser.</li>
+  <li>Path: templates/upload_test_data.html, app.py, services.py, forms.py.</li>
+  <li>Push IG Enhancements (April 2025):</li>
+  <li>Added semantic comparison to skip uploading identical resources.</li>
+  <li>Added “Force Upload” option to bypass comparison.</li>
+  <li>Improved handling of canonical resources (search before PUT/POST).</li>
+  <li>Added filtering by specific files to skip during push.</li>
+  <li>More detailed summary report in stream response.</li>
+  <li>Path: templates/cp_push_igs.html, app.py, services.py.</li>
+  <li>Waiting Spinner for FSH Converter (April 2025):</li>
+  <li>Added a themed (light/dark) Lottie animation spinner during FSH execution.</li>
+  <li>Path: templates/fsh_converter.html, static/animations/, static/js/lottie-web.min.js.</li>
+  <li>Advanced FSH Converter (April 2025):</li>
+  <li>Added support for GoFSH advanced options: –fshing-trip, –dependency, –indent, –meta-profile, –alias-file, –no-alias.</li>
+  <li>Displays Fishing Trip comparison reports.</li>
+  <li>Path: templates/fsh_converter.html, app.py, services.py, forms.py.</li>
+  <li>(New) Retrieve and Split Data (May 2025):</li>
+  <li>Added UI and API for retrieving bundles from a FHIR server by resource type.</li>
+  <li>Added options to fetch referenced resources (individually or as full type bundles).</li>
+  <li>Added functionality to split uploaded ZIP files of bundles into individual resources.</li>
+  <li>Streaming log for retrieval and ZIP download for results.</li>
+  <li>Paths: templates/retrieve_split_data.html, app.py, services.py, forms.py.</li>
+  <li>Known Issues and Workarounds</li>
+  <li>Favicon 404: Clear browser cache or verify /app/static/favicon.ico.</li>
+  <li>CSRF Errors: Set FLASK_SECRET_KEY and ensure  in forms.</li>
+  <li>Import Fails: Check package name/version and connectivity.</li>
+  <li>Validation Accuracy: Alpha feature; report issues to GitHub (remove PHI).</li>
+  <li>Package Parsing: Non-standard .tgz filenames may parse incorrectly. Fallback uses name-only parsing.</li>
+  <li>Permissions: Ensure instance/ and static/uploads/ are writable.</li>
+  <li>GoFSH/SUSHI Errors: Check ./logs/flask_err.log for ERROR:services:GoFSH failed. Ensure valid FHIR inputs and SUSHI installation.</li>
+  <li>Upload Test Data XML Parsing: Relies on fhir.resources library for full validation; basic parsing used as fallback. Complex XML structures might not be fully analyzed for dependencies with basic parsing. Prefer JSON for reliable dependency analysis.</li>
+  <li>413 Request Entity Too Large: Primarily handled by CustomFormDataParser for /api/upload-test-data. Check the parser’s max_form_parts limit if still occurring. MAX_CONTENT_LENGTH in app.py controls overall size. Reverse proxy limits (client_max_body_size in Nginx) might also apply.</li>
+</ul>
+
+<p>Future Improvements</p>
+
+<ul>
+  <li>Upload Test Data: Improve XML parsing further (direct XML-&gt;fhir.resource object if possible), add visual progress bar, add upload order preview, implement transaction bundle size splitting, add ‘Clear Target Server’ option (with confirmation).</li>
+  <li>Validation: Enhance FHIRPath for complex constraints; add API endpoint.</li>
+  <li>Sorting: Sort IG versions in /view-igs (e.g., ascending).</li>
+  <li>Duplicate Resolution: Options to keep latest version or merge resources.</li>
+  <li>Production Database: Support PostgreSQL.</li>
+  <li>Error Reporting: Detailed validation error paths in the UI.</li>
+  <li>FSH Enhancements: Add API endpoint for FSH conversion; support inline instance construction.</li>
+  <li>FHIR Operations: Add complex parameter support (e.g., /$diff with left/right).</li>
+  <li>Retrieve/Split Data: Add option to filter resources during retrieval (e.g., by date, specific IDs).</li>
+</ul>
+
+<p>Completed Items</p>
+
+<ul>
+  <li>Testing suite with basic coverage.</li>
+  <li>API endpoints for POST /api/import-ig and POST /api/push-ig.</li>
+  <li>Flexible versioning (-preview, -ballot).</li>
+  <li>CSRF fixes for forms.</li>
+  <li>Resource validation UI (alpha).</li>
+  <li>FSH Converter with advanced GoFSH features and waiting spinner.</li>
+  <li>Push IG enhancements (force upload, semantic comparison, canonical handling, skip files).</li>
+  <li>Upload Test Data feature with dependency sorting, multiple upload modes, pre-upload validation, conditional uploads, robust XML parsing, and fix for large file counts.</li>
+  <li>Retrieve and Split Data functionality with reference fetching and ZIP download.</li>
+  <li>Far-Distant Improvements</li>
+  <li>Cache Service: Use Redis for IG metadata caching.</li>
+  <li>Database Optimization: Composite index on ProcessedIg.package_name and ProcessedIg.version.</li>
+</ul>
+
+<p>Directory Structure</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FHIRFLARE-IG-Toolkit/
+├── app.py                              <span class="c"># Main Flask application</span>
+├── Build and Run <span class="k">for </span>first time.bat    <span class="c"># Windows script for first-time Docker setup</span>
+├── docker-compose.yml                  <span class="c"># Docker Compose configuration</span>
+├── Dockerfile                          <span class="c"># Docker configuration</span>
+├── forms.py                            <span class="c"># Form definitions</span>
+├── LICENSE.md                          <span class="c"># Apache 2.0 License</span>
+├── README.md                           <span class="c"># Project documentation</span>
+├── requirements.txt                    <span class="c"># Python dependencies</span>
+├── Run.bat                             <span class="c"># Windows script for running Docker</span>
+├── services.py                         <span class="c"># Logic for IG import, processing, validation, pushing, FSH conversion, test data upload, retrieve/split</span>
+├── supervisord.conf                    <span class="c"># Supervisor configuration</span>
+├── hapi-fhir-Setup/
+│   ├── README.md                       <span class="c"># HAPI FHIR setup instructions</span>
+│   └── target/
+│       └── classes/
+│           └── application.yaml        <span class="c"># HAPI FHIR configuration</span>
+├── instance/
+│   ├── fhir_ig.db                      <span class="c"># SQLite database</span>
+│   ├── fhir_ig.db.old                  <span class="c"># Database backup</span>
+│   └── fhir_packages/                  <span class="c"># Stored IG packages and metadata</span>
+│       ├── ... <span class="o">(</span>example packages<span class="o">)</span> ...
+├── logs/
+│   ├── flask.log                       <span class="c"># Flask application logs</span>
+│   ├── flask_err.log                   <span class="c"># Flask error logs</span>
+│   ├── supervisord.log                 <span class="c"># Supervisor logs</span>
+│   ├── supervisord.pid                 <span class="c"># Supervisor PID file</span>
+│   ├── tomcat.log                      <span class="c"># Tomcat logs for HAPI FHIR</span>
+│   └── tomcat_err.log                  <span class="c"># Tomcat error logs</span>
+├── static/
+│   ├── animations/
+│   │   ├── loading-dark.json           <span class="c"># Dark theme spinner animation</span>
+│   │   └── loading-light.json          <span class="c"># Light theme spinner animation</span>
+│   ├── favicon.ico                     <span class="c"># Application favicon</span>
+│   ├── FHIRFLARE.png                   <span class="c"># Application logo</span>
+│   ├── js/
+│   │   └── lottie-web.min.js           <span class="c"># Lottie library for spinner</span>
+│   └── uploads/
+│       ├── output.fsh                  <span class="c"># Generated FSH output (temp location)</span>
+│       └── fsh_output/                 <span class="c"># GoFSH output directory</span>
+│           ├── ... <span class="o">(</span>example GoFSH output<span class="o">)</span> ...
+├── templates/
+│   ├── base.html                       <span class="c"># Base template</span>
+│   ├── cp_downloaded_igs.html          <span class="c"># UI for managing IGs</span>
+│   ├── cp_push_igs.html                <span class="c"># UI for pushing IGs</span>
+│   ├── cp_view_processed_ig.html       <span class="c"># UI for viewing processed IGs</span>
+│   ├── fhir_ui.html                    <span class="c"># UI for FHIR API explorer</span>
+│   ├── fhir_ui_operations.html         <span class="c"># UI for FHIR server operations</span>
+│   ├── fsh_converter.html              <span class="c"># UI for FSH conversion</span>
+│   ├── import_ig.html                  <span class="c"># UI for importing IGs</span>
+│   ├── index.html                      <span class="c"># Homepage</span>
+│   ├── retrieve_split_data.html        <span class="c"># UI for Retrieve and Split Data</span>
+│   ├── upload_test_data.html           <span class="c"># UI for Uploading Test Data</span>
+│   ├── validate_sample.html            <span class="c"># UI for validating resources/bundles</span>
+│   ├── config_hapi.html                <span class="c"># UI for HAPI FHIR Configuration</span>
+│   └── _form_helpers.html              <span class="c"># Form helper macros</span>
+├── tests/
+│   └── test_app.py                     <span class="c"># Test suite</span>
+└── hapi-fhir-jpaserver/                <span class="c"># HAPI FHIR server resources (if Standalone)</span>
+</code></pre></div></div>
+
+<p>Contributing</p>
+
+<ol>
+  <li>Fork the repository.</li>
+  <li>Create a feature branch (git checkout -b feature/your-feature).</li>
+  <li>Commit changes (git commit -m “Add your feature”).</li>
+  <li>Push to your branch (git push origin feature/your-feature).</li>
+  <li>Open a Pull Request.</li>
+  <li>Ensure code follows PEP 8 and includes tests in tests/test_app.py.</li>
+</ol>
+
+<p>Troubleshooting</p>
+
+<ul>
+  <li>Favicon 404: Clear browser cache or verify /app/static/favicon.ico: docker exec -it <container_name> curl http://localhost:5000/static/favicon.ico</container_name></li>
+  <li>CSRF Errors: Set FLASK_SECRET_KEY and ensure  in forms.</li>
+  <li>Import Fails: Check package name/version and connectivity.</li>
+  <li>Validation Accuracy: Alpha feature; report issues to GitHub (remove PHI).</li>
+  <li>Package Parsing: Non-standard .tgz filenames may parse incorrectly. Fallback uses name-only parsing.</li>
+  <li>Permissions: Ensure instance/ and static/uploads/ are writable: chmod -R 777 instance static/uploads logs</li>
+  <li>GoFSH/SUSHI Errors: Check ./logs/flask_err.log for ERROR:services:GoFSH failed. Ensure valid FHIR inputs and SUSHI installation: docker exec -it <container_name> sushi --version</container_name></li>
+  <li>413 Request Entity Too Large: Increase MAX_CONTENT_LENGTH and MAX_FORM_PARTS in app.py. If using a reverse proxy (e.g., Nginx), increase its client_max_body_size setting as well. Ensure the application/container is fully restarted/rebuilt.</li>
+</ul>
+
+<p>License</p>
+
+<p>Licensed under the Apache 2.0 License. See LICENSE.md for details.</p>
+
+
+      </section>
+    </div>
+    <footer>
+    
+      <p>Project maintained by <a href="https://github.com/Sudo-JHare">Sudo-JHare</a></p>
+    
+      <p>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></p>
+    </footer>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+  </body>
+</html>
