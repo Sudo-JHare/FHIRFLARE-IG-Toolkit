@@ -1,0 +1,16 @@
+apiVersion: v2
+name: fhirflare-ig-toolkit
+version: 0.4.0
+description: Helm chart for deploying the fhirflare-ig-toolkit application
+type: application
+appVersion: "latest"
+icon: https://github.com/jgsuess/FHIRFLARE-IG-Toolkit/raw/main/static/FHIRFLARE.png
+keywords:
+  - fhir
+  - healthcare
+  - ig-toolkit
+  - implementation-guide
+home: https://github.com/jgsuess/FHIRFLARE-IG-Toolkit
+maintainers:
+  - name: Jörn Guy Süß
+    email: jgsuess@gmail.com
