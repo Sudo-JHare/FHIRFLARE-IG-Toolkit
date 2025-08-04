@@ -1,0 +1,223 @@
+/* /app/static/css/fire-animation.css */
+
+/* Removed html, body, stage styles */
+
+.minifire-container { /* Add a wrapper for positioning/sizing */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  height: 130px; /* Overall height of the animation area */
+  overflow: hidden; /* Hide parts extending beyond the container */
+  background-color: #270537; /* Optional: Add a background */
+  border-radius: 4px;
+  border: 1px solid #444;
+  margin-top: 0.5rem; /* Space above animation */
+}
+
+.minifire-campfire {
+  position: relative;
+  /* Base size significantly reduced (original was 600px) */
+  width: 150px;
+  height: 150px;
+  transform-origin: bottom center;
+  /* Scale down slightly more if needed, adjusted positioning based on origin */
+  transform: scale(0.8) translateY(15px); /* Pushes it down slightly */
+}
+
+/* --- Scaled Down Logs --- */
+.minifire-log {
+  position: absolute;
+  width: 60px; /* 238/4 */
+  height: 18px; /* 70/4 */
+  border-radius: 8px; /* 32/4 */
+  background: #781e20;
+  overflow: hidden;
+  opacity: 0.99;
+  transform-origin: center center;
+  box-shadow: 0 0 1px 0.5px rgba(0,0,0,0.15); /* Scaled shadow */
+}
+
+.minifire-log:before {
+  content: '';
+  display: block;
+  position: absolute;
+  top: 50%;
+  left: 9px; /* 35/4 */
+  width: 2px; /* 8/4 */
+  height: 2px; /* 8/4 */
+  border-radius: 8px; /* 32/4 */
+  background: #b35050;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  /* Scaled box-shadows */
+  box-shadow: 0 0 0 0.5px #781e20, /* 2.5/4 -> 0.6 -> 0.5 */
+              0 0 0 2.5px #b35050, /* 10.5/4 -> 2.6 -> 2.5 */
+              0 0 0 3.5px #781e20, /* 13/4 -> 3.25 -> 3.5 */
+              0 0 0 5.5px #b35050, /* 21/4 -> 5.25 -> 5.5 */
+              0 0 0 6px #781e20,   /* 23.5/4 -> 5.9 -> 6 */
+              0 0 0 8px #b35050;   /* 31.5/4 -> 7.9 -> 8 */
+}
+
+.minifire-streak {
+  position: absolute;
+  height: 1px; /* Min height */
+  border-radius: 5px; /* 20/4 */
+  background: #b35050;
+}
+/* Scaled streaks */
+.minifire-streak:nth-child(1) { top: 3px; width: 23px; } /* 10/4, 90/4 */
+.minifire-streak:nth-child(2) { top: 3px; left: 25px; width: 20px; } /* 10/4, 100/4, 80/4 */
+.minifire-streak:nth-child(3) { top: 3px; left: 48px; width: 8px; } /* 10/4, 190/4, 30/4 */
+.minifire-streak:nth-child(4) { top: 6px; width: 33px; } /* 22/4, 132/4 */
+.minifire-streak:nth-child(5) { top: 6px; left: 36px; width: 12px; } /* 22/4, 142/4, 48/4 */
+.minifire-streak:nth-child(6) { top: 6px; left: 50px; width: 7px; } /* 22/4, 200/4, 28/4 */
+.minifire-streak:nth-child(7) { top: 9px; left: 19px; width: 40px; } /* 34/4, 74/4, 160/4 */
+.minifire-streak:nth-child(8) { top: 12px; left: 28px; width: 10px; } /* 46/4, 110/4, 40/4 */
+.minifire-streak:nth-child(9) { top: 12px; left: 43px; width: 14px; } /* 46/4, 170/4, 54/4 */
+.minifire-streak:nth-child(10) { top: 15px; left: 23px; width: 28px; } /* 58/4, 90/4, 110/4 */
+
+/* Scaled Log Positions (Relative to 150px campfire) */
+.minifire-log:nth-child(1) { bottom: 25px; left: 25px; transform: rotate(150deg) scaleX(0.75); z-index: 20; } /* 100/4, 100/4 */
+.minifire-log:nth-child(2) { bottom: 30px; left: 35px; transform: rotate(110deg) scaleX(0.75); z-index: 10; } /* 120/4, 140/4 */
+.minifire-log:nth-child(3) { bottom: 25px; left: 17px; transform: rotate(-10deg) scaleX(0.75); } /* 98/4, 68/4 */
+.minifire-log:nth-child(4) { bottom: 20px; left: 55px; transform: rotate(-120deg) scaleX(0.75); z-index: 26; } /* 80/4, 220/4 */
+.minifire-log:nth-child(5) { bottom: 19px; left: 53px; transform: rotate(-30deg) scaleX(0.75); z-index: 25; } /* 75/4, 210/4 */
+.minifire-log:nth-child(6) { bottom: 23px; left: 70px; transform: rotate(35deg) scaleX(0.85); z-index: 30; } /* 92/4, 280/4 */
+.minifire-log:nth-child(7) { bottom: 18px; left: 75px; transform: rotate(-30deg) scaleX(0.75); z-index: 20; } /* 70/4, 300/4 */
+
+/* --- Scaled Down Sticks --- */
+.minifire-stick {
+  position: absolute;
+  width: 17px; /* 68/4 */
+  height: 5px; /* 20/4 */
+  border-radius: 3px; /* 10/4 */
+  box-shadow: 0 0 1px 0.5px rgba(0,0,0,0.1);
+  background: #781e20;
+  transform-origin: center center;
+}
+.minifire-stick:before {
+  content: '';
+  display: block;
+  position: absolute;
+  bottom: 100%;
+  left: 7px; /* 30/4 -> 7.5 */
+  width: 1.5px; /* 6/4 */
+  height: 5px; /* 20/4 */
+  background: #781e20;
+  border-radius: 3px; /* 10/4 */
+  transform: translateY(50%) rotate(32deg);
+}
+.minifire-stick:after {
+  content: '';
+  display: block;
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 5px; /* 20/4 */
+  height: 5px; /* 20/4 */
+  background: #b35050;
+  border-radius: 3px; /* 10/4 */
+}
+/* Scaled Stick Positions */
+.minifire-stick:nth-child(1) { left: 40px; bottom: 41px; transform: rotate(-152deg) scaleX(0.8); z-index: 12; } /* 158/4, 164/4 */
+.minifire-stick:nth-child(2) { left: 45px; bottom: 8px; transform: rotate(20deg) scaleX(0.9); } /* 180/4, 30/4 */
+.minifire-stick:nth-child(3) { left: 100px; bottom: 10px; transform: rotate(170deg) scaleX(0.9); } /* 400/4, 38/4 */
+.minifire-stick:nth-child(3):before { display: none; }
+.minifire-stick:nth-child(4) { left: 93px; bottom: 38px; transform: rotate(80deg) scaleX(0.9); z-index: 20; } /* 370/4, 150/4 */
+.minifire-stick:nth-child(4):before { display: none; }
+
+/* --- Scaled Down Fire --- */
+.minifire-fire .minifire-flame {
+  position: absolute;
+  transform-origin: bottom center;
+  opacity: 0.9;
+}
+
+/* Red Flames */
+.minifire-fire__red .minifire-flame {
+  width: 12px; /* 48/4 */
+  border-radius: 12px; /* 48/4 */
+  background: #e20f00;
+  box-shadow: 0 0 20px 5px rgba(226,15,0,0.4); /* Scaled shadow */
+}
+/* Scaled positions/heights */
+.minifire-fire__red .minifire-flame:nth-child(1) { left: 35px; height: 40px; bottom: 25px; animation: minifire-fire 2s 0.15s ease-in-out infinite alternate; } /* 138/4, 160/4, 100/4 */
+.minifire-fire__red .minifire-flame:nth-child(2) { left: 47px; height: 60px; bottom: 25px; animation: minifire-fire 2s 0.35s ease-in-out infinite alternate; } /* 186/4, 240/4, 100/4 */
+.minifire-fire__red .minifire-flame:nth-child(3) { left: 59px; height: 75px; bottom: 25px; animation: minifire-fire 2s 0.1s ease-in-out infinite alternate; } /* 234/4, 300/4, 100/4 */
+.minifire-fire__red .minifire-flame:nth-child(4) { left: 71px; height: 90px; bottom: 25px; animation: minifire-fire 2s 0s ease-in-out infinite alternate; } /* 282/4, 360/4, 100/4 */
+.minifire-fire__red .minifire-flame:nth-child(5) { left: 83px; height: 78px; bottom: 25px; animation: minifire-fire 2s 0.45s ease-in-out infinite alternate; } /* 330/4, 310/4, 100/4 */
+.minifire-fire__red .minifire-flame:nth-child(6) { left: 95px; height: 58px; bottom: 25px; animation: minifire-fire 2s 0.3s ease-in-out infinite alternate; } /* 378/4, 232/4, 100/4 */
+.minifire-fire__red .minifire-flame:nth-child(7) { left: 107px; height: 35px; bottom: 25px; animation: minifire-fire 2s 0.1s ease-in-out infinite alternate; } /* 426/4, 140/4, 100/4 */
+
+/* Orange Flames */
+.minifire-fire__orange .minifire-flame {
+  width: 12px; border-radius: 12px; background: #ff9c00;
+  box-shadow: 0 0 20px 5px rgba(255,156,0,0.4);
+}
+.minifire-fire__orange .minifire-flame:nth-child(1) { left: 35px; height: 35px; bottom: 25px; animation: minifire-fire 2s 0.05s ease-in-out infinite alternate; }
+.minifire-fire__orange .minifire-flame:nth-child(2) { left: 47px; height: 53px; bottom: 25px; animation: minifire-fire 2s 0.1s ease-in-out infinite alternate; }
+.minifire-fire__orange .minifire-flame:nth-child(3) { left: 59px; height: 63px; bottom: 25px; animation: minifire-fire 2s 0.35s ease-in-out infinite alternate; }
+.minifire-fire__orange .minifire-flame:nth-child(4) { left: 71px; height: 75px; bottom: 25px; animation: minifire-fire 2s 0.4s ease-in-out infinite alternate; }
+.minifire-fire__orange .minifire-flame:nth-child(5) { left: 83px; height: 65px; bottom: 25px; animation: minifire-fire 2s 0.5s ease-in-out infinite alternate; }
+.minifire-fire__orange .minifire-flame:nth-child(6) { left: 95px; height: 51px; bottom: 25px; animation: minifire-fire 2s 0.35s ease-in-out infinite alternate; }
+.minifire-fire__orange .minifire-flame:nth-child(7) { left: 107px; height: 28px; bottom: 25px; animation: minifire-fire 2s 0.1s ease-in-out infinite alternate; }
+
+/* Yellow Flames */
+.minifire-fire__yellow .minifire-flame {
+  width: 12px; border-radius: 12px; background: #ffeb6e;
+  box-shadow: 0 0 20px 5px rgba(255,235,110,0.4);
+}
+.minifire-fire__yellow .minifire-flame:nth-child(1) { left: 47px; height: 35px; bottom: 25px; animation: minifire-fire 2s 0.6s ease-in-out infinite alternate; }
+.minifire-fire__yellow .minifire-flame:nth-child(2) { left: 59px; height: 43px; bottom: 30px; animation: minifire-fire 2s 0.4s ease-in-out infinite alternate; } /* Adjusted bottom slightly */
+.minifire-fire__yellow .minifire-flame:nth-child(3) { left: 71px; height: 60px; bottom: 25px; animation: minifire-fire 2s 0.38s ease-in-out infinite alternate; }
+.minifire-fire__yellow .minifire-flame:nth-child(4) { left: 83px; height: 50px; bottom: 25px; animation: minifire-fire 2s 0.22s ease-in-out infinite alternate; }
+.minifire-fire__yellow .minifire-flame:nth-child(5) { left: 95px; height: 36px; bottom: 25px; animation: minifire-fire 2s 0.18s ease-in-out infinite alternate; }
+
+/* White Flames */
+.minifire-fire__white .minifire-flame {
+  width: 12px; border-radius: 12px; background: #fef1d9;
+  box-shadow: 0 0 20px 5px rgba(254,241,217,0.4);
+}
+.minifire-fire__white .minifire-flame:nth-child(1) { left: 39px; width: 8px; height: 25px; bottom: 25px; animation: minifire-fire 2s 0.22s ease-in-out infinite alternate; } /* Scaled width too */
+.minifire-fire__white .minifire-flame:nth-child(2) { left: 45px; width: 8px; height: 30px; bottom: 25px; animation: minifire-fire 2s 0.42s ease-in-out infinite alternate; }
+.minifire-fire__white .minifire-flame:nth-child(3) { left: 59px; height: 43px; bottom: 25px; animation: minifire-fire 2s 0.32s ease-in-out infinite alternate; }
+.minifire-fire__white .minifire-flame:nth-child(4) { left: 71px; height: 53px; bottom: 25px; animation: minifire-fire 2s 0.8s ease-in-out infinite alternate; }
+.minifire-fire__white .minifire-flame:nth-child(5) { left: 83px; height: 43px; bottom: 25px; animation: minifire-fire 2s 0.85s ease-in-out infinite alternate; }
+.minifire-fire__white .minifire-flame:nth-child(6) { left: 95px; width: 8px; height: 28px; bottom: 25px; animation: minifire-fire 2s 0.64s ease-in-out infinite alternate; }
+.minifire-fire__white .minifire-flame:nth-child(7) { left: 102px; width: 8px; height: 25px; bottom: 25px; animation: minifire-fire 2s 0.32s ease-in-out infinite alternate; }
+
+/* --- Scaled Down Sparks --- */
+.minifire-spark {
+  position: absolute;
+  width: 1.5px; /* 6/4 */
+  height: 5px; /* 20/4 */
+  background: #fef1d9;
+  border-radius: 5px; /* 18/4 -> 4.5 */
+  z-index: 50;
+  transform-origin: bottom center;
+  transform: scaleY(0);
+}
+/* Scaled spark positions/animations */
+.minifire-spark:nth-child(1) { left: 40px; bottom: 53px; animation: minifire-spark 1s 0.4s linear infinite; } /* 160/4, 212/4 */
+.minifire-spark:nth-child(2) { left: 45px; bottom: 60px; animation: minifire-spark 1s 1s linear infinite; } /* 180/4, 240/4 */
+.minifire-spark:nth-child(3) { left: 52px; bottom: 80px; animation: minifire-spark 1s 0.8s linear infinite; } /* 208/4, 320/4 */
+.minifire-spark:nth-child(4) { left: 78px; bottom: 100px; animation: minifire-spark 1s 2s linear infinite; } /* 310/4, 400/4 */
+.minifire-spark:nth-child(5) { left: 90px; bottom: 95px; animation: minifire-spark 1s 0.75s linear infinite; } /* 360/4, 380/4 */
+.minifire-spark:nth-child(6) { left: 98px; bottom: 80px; animation: minifire-spark 1s 0.65s linear infinite; } /* 390/4, 320/4 */
+.minifire-spark:nth-child(7) { left: 100px; bottom: 70px; animation: minifire-spark 1s 1s linear infinite; } /* 400/4, 280/4 */
+.minifire-spark:nth-child(8) { left: 108px; bottom: 53px; animation: minifire-spark 1s 1.4s linear infinite; } /* 430/4, 210/4 */
+
+/* --- Keyframes (Rename to avoid conflicts) --- */
+/* Use the same keyframe logic, just rename them */
+@keyframes minifire-fire {
+  0% { transform: scaleY(1); } 28% { transform: scaleY(0.7); } 38% { transform: scaleY(0.8); } 50% { transform: scaleY(0.6); } 70% { transform: scaleY(0.95); } 82% { transform: scaleY(0.58); } 100% { transform: scaleY(1); }
+}
+@keyframes minifire-spark {
+  0%, 35% { transform: scaleY(0) translateY(0); opacity: 0; }
+  50% { transform: scaleY(1) translateY(0); opacity: 1; }
+  /* Adjusted translateY for smaller scale */
+  70% { transform: scaleY(1) translateY(-3px); opacity: 1; } /* 10/4 -> 2.5 -> 3 */
+  75% { transform: scaleY(1) translateY(-3px); opacity: 0; }
+  100% { transform: scaleY(0) translateY(0); opacity: 0; }
+}

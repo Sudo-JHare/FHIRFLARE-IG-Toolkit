@@ -1,0 +1,8 @@
+canonical: http://example.org
+fhirVersion: 4.3.0
+FSHOnly: true
+applyExtensionMetadataToRoot: false
+id: example
+name: Example
+dependencies:
+  hl7.fhir.us.core: 6.1.0
