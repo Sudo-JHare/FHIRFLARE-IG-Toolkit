@@ -27,7 +27,7 @@
                     </ul>
                 </div>
             {% endif %}
-            <form id="retrieveForm" method="POST">
+            <form id="retrieveForm" method="POST" enctype="multipart/form-data">
                 {{ form.hidden_tag() }}
                 <div class="mb-3">
                     <label class="form-label fw-bold">FHIR Server</label>
@@ -181,7 +181,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let retrieveZipPath = null;
     let splitZipPath = null;
     let fetchedMetadataCache = null;
-    let eventSource = null;
 
     // --- Helper Functions ---
     const sanitizeText = (str) => str ? String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
@@ -301,10 +300,10 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchMetadataButton.textContent = 'Fetching...';
 
         try {
-            // Updated metadata fetch logic to handle both local and custom URLs
-            const fetchUrl = useLocalHapi ? '/fhir/metadata' : `${customUrl}/metadata`;
+            const fetchUrl = '/fhir/metadata';
             const headers = { 'Accept': 'application/fhir+json' };
-            if (!useLocalHapi) {
+            if (!useLocalHapi && customUrl) {
+                headers['X-Target-FHIR-Server'] = customUrl;
                 if (authTypeSelect && authTypeSelect.value !== 'none') {
                     const authType = authTypeSelect.value;
                     if (authType === 'bearer' && bearerTokenInput && bearerTokenInput.value) {
@@ -314,10 +313,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         headers['Authorization'] = `Basic ${credentials}`;
                     }
                 }
-                console.log(`Fetching metadata directly from: ${customUrl}`);
+                console.log(`Fetching metadata via proxy with X-Target-FHIR-Server: ${customUrl}`);
             } else {
-                console.log("Fetching metadata from local HAPI server via proxy");
+                console.log("Fetching metadata via proxy for local HAPI server");
             }
+            console.log(`Proxy Fetch URL: ${fetchUrl}`);
+            console.log(`Request Headers sent TO PROXY: ${JSON.stringify(headers)}`);
 
             const response = await fetch(fetchUrl, { method: 'GET', headers: headers });
 
@@ -381,8 +382,26 @@ document.addEventListener('DOMContentLoaded', () => {
             if (icon) icon.style.display = 'inline-block';
             return;
         }
-        
-        const currentFhirServerUrl = useLocalHapi ? null : fhirServerUrlInput.value.trim().replace(/\/+$/, '');
+
+        const formData = new FormData();
+        const csrfTokenInput = retrieveForm.querySelector('input[name="csrf_token"]');
+        if (csrfTokenInput) formData.append('csrf_token', csrfTokenInput.value);
+        selectedResources.forEach(res => formData.append('resources', res));
+
+        if (validateReferencesCheckbox) {
+            formData.append('validate_references', validateReferencesCheckbox.checked ? 'true' : 'false');
+        }
+        if (fetchReferenceBundlesCheckbox) {
+            if (validateReferencesCheckbox && validateReferencesCheckbox.checked) {
+                formData.append('fetch_reference_bundles', fetchReferenceBundlesCheckbox.checked ? 'true' : 'false');
+            } else {
+                formData.append('fetch_reference_bundles', 'false');
+            }
+        } else {
+            formData.append('fetch_reference_bundles', 'false');
+        }
+
+        const currentFhirServerUrl = useLocalHapi ? '/fhir' : fhirServerUrlInput.value.trim();
         if (!useLocalHapi && !currentFhirServerUrl) {
             alert('Custom FHIR Server URL is required.');
             fhirServerUrlInput.classList.add('is-invalid');
@@ -391,45 +410,43 @@ document.addEventListener('DOMContentLoaded', () => {
             if (icon) icon.style.display = 'inline-block';
             return;
         }
+        formData.append('fhir_server_url', currentFhirServerUrl);
 
-        const authType = authTypeSelect?.value;
-        const authHeader = (authType === 'bearer' && bearerTokenInput?.value) ? `Bearer ${bearerTokenInput.value}`
-            : (authType === 'basic' && usernameInput?.value && passwordInput?.value) ? `Basic ${btoa(`${usernameInput.value}:${passwordInput.value}`)}`
-            : null;
-        
-        const validateReferences = validateReferencesCheckbox?.checked ? 'true' : 'false';
-        const fetchReferenceBundles = validateReferences === 'true' && fetchReferenceBundlesCheckbox?.checked ? 'true' : 'false';
+        // Add authentication fields for custom URL
+        if (!useLocalHapi && authTypeSelect) {
+            const authType = authTypeSelect.value;
+            formData.append('auth_type', authType);
+            if (authType === 'bearer' && bearerTokenInput) {
+                if (!bearerTokenInput.value) {
+                    alert('Please enter a Bearer Token.');
+                    retrieveButton.disabled = false;
+                    if (spinner) spinner.style.display = 'none';
+                    if (icon) icon.style.display = 'inline-block';
+                    return;
+                }
+                formData.append('bearer_token', bearerTokenInput.value);
+            } else if (authType === 'basic' && usernameInput && passwordInput) {
+                if (!usernameInput.value || !passwordInput.value) {
+                    alert('Please enter both Username and Password for Basic Authentication.');
+                    retrieveButton.disabled = false;
+                    if (spinner) spinner.style.display = 'none';
+                    if (icon) icon.style.display = 'inline-block';
+                    return;
+                }
+                formData.append('username', usernameInput.value);
+                formData.append('password', passwordInput.value);
+            }
+        }
 
-        // --- Stream the logs directly from the server ---
-        const url = new URL('/api/stream-retrieve', window.location.origin);
-        
-        // Use POST for the new endpoint
-        const formData = {
-            fhir_server_url: currentFhirServerUrl,
-            resources: selectedResources,
-            validate_references: validateReferences,
-            fetch_reference_bundles: fetchReferenceBundles
-        };
-        
         const headers = {
-            'Content-Type': 'application/json',
             'Accept': 'application/x-ndjson',
+            'X-CSRFToken': csrfTokenInput ? csrfTokenInput.value : '',
+            'X-API-Key': apiKey
         };
-        if (authHeader) {
-            headers['Authorization'] = authHeader;
-        }
-        const csrfTokenInput = retrieveForm.querySelector('input[name="csrf_token"]');
-        if (csrfTokenInput) {
-            headers['X-CSRFToken'] = csrfTokenInput.value;
-        }
-        if (apiKey) {
-            headers['X-API-Key'] = apiKey;
-        }
-
-        console.log(`Submitting retrieve request. URL: ${url.toString()}, Headers: ${JSON.stringify(headers)}, Body: ${JSON.stringify(formData)}`);
+        console.log(`Submitting retrieve request. Server: ${currentFhirServerUrl}, ValidateRefs: ${formData.get('validate_references')}, FetchRefBundles: ${formData.get('fetch_reference_bundles')}, AuthType: ${formData.get('auth_type')}`);
 
         try {
-            const response = await fetch(url.toString(), { method: 'POST', headers: headers, body: JSON.stringify(formData) });
+            const response = await fetch('/api/retrieve-bundles', { method: 'POST', headers: headers, body: formData });
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response.' }));
@@ -437,6 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             retrieveZipPath = response.headers.get('X-Zip-Path');
             console.log(`Received X-Zip-Path: ${retrieveZipPath}`);
+
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
@@ -669,3 +687,4 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleFetchReferenceBundles();
 });
 </script>
+{% endblock %}
