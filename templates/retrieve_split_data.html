@@ -383,6 +383,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         const currentFhirServerUrl = useLocalHapi ? null : fhirServerUrlInput.value.trim().replace(/\/+$/, '');
+        if (!useLocalHapi && !currentFhirServerUrl) {
+            alert('Custom FHIR Server URL is required.');
+            fhirServerUrlInput.classList.add('is-invalid');
+            retrieveButton.disabled = false;
+            if (spinner) spinner.style.display = 'none';
+            if (icon) icon.style.display = 'inline-block';
+            return;
+        }
+
         const authType = authTypeSelect?.value;
         const authHeader = (authType === 'bearer' && bearerTokenInput?.value) ? `Bearer ${bearerTokenInput.value}`
             : (authType === 'basic' && usernameInput?.value && passwordInput?.value) ? `Basic ${btoa(`${usernameInput.value}:${passwordInput.value}`)}`
@@ -391,7 +400,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const validateReferences = validateReferencesCheckbox?.checked ? 'true' : 'false';
         const fetchReferenceBundles = validateReferences === 'true' && fetchReferenceBundlesCheckbox?.checked ? 'true' : 'false';
 
-        // --- Stream the logs directly from the new backend endpoint ---
+        // --- Stream the logs directly from the server ---
         const url = new URL('/api/stream-retrieve', window.location.origin);
         
         // Use POST for the new endpoint
