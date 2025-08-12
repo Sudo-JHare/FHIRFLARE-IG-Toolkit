@@ -11,7 +11,7 @@ from flask import current_app, Blueprint, request, jsonify
 from fhirpathpy import evaluate
 from collections import defaultdict, deque
 from pathlib import Path
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlparse, urljoin
 from types import SimpleNamespace
 import datetime
 import subprocess
@@ -4607,7 +4607,8 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
         # Fetch Initial Bundles
         initial_bundle_files = []
         for resource_type in resources:
-            url = f"{base_proxy_url}/{quote(resource_type)}"
+            #url = f"{base_proxy_url}/{quote(resource_type)}"
+            url = urljoin(base_proxy_url, quote(resource_type))
             yield json.dumps({"type": "progress", "message": f"Fetching bundle for {resource_type} via proxy..."}) + "\n"
             logger.debug(f"Sending GET request to proxy {url} with headers: {json.dumps(headers)}")
             try:
