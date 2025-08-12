@@ -4584,7 +4584,8 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
             yield json.dumps({"type": "info", "message": "Reference fetching OFF"}) + "\n"
 
         # Determine the final base URL for requests.
-        final_base_url = fhir_server_url.rstrip('/') if fhir_server_url and fhir_server_url != '/fhir' else app.config.get('HAPI_FHIR_URL', 'http://localhost:8080/fhir')
+        from flask import current_app
+        final_base_url = fhir_server_url.rstrip('/') if fhir_server_url and fhir_server_url != '/fhir' else current_app.config.get('HAPI_FHIR_URL', 'http://localhost:8080/fhir')
         headers = {'Accept': 'application/fhir+json, application/fhir+xml;q=0.9, */*;q=0.8'}
 
         is_custom_url = fhir_server_url != '/fhir' and fhir_server_url is not None and fhir_server_url.startswith('http')

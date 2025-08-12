@@ -1907,22 +1907,22 @@ def proxy_hapi(subpath):
          return jsonify({'resourceType': 'OperationOutcome', 'issue': [{'severity': 'error', 'code': 'exception', 'diagnostics': 'An unexpected error occurred within the FHIR proxy.', 'details': {'text': str(e)}}]}), 500
 
 
-@app.route('/api/stream-retrieve', methods=['POST'])
+@app.route('/api/stream-retrieve', methods=['GET'])
 def stream_retrieve_bundles():
     """
     Handles streaming FHIR bundle retrieval. This endpoint directly calls the service function,
     bypassing the proxy to avoid conflicts. It receives the target URL,
-    resources, and other parameters from the front-end via a JSON body.
+    resources, and other parameters from the front-end via URL query parameters.
     """
     def generate_stream():
         with app.app_context():
-            # Extract parameters from JSON body
-            data = request.json
-            fhir_server_url = data.get('fhir_server_url')
-            resources = data.get('resources')
-            validate_references = data.get('validate_references', False)
-            fetch_reference_bundles = data.get('fetch_reference_bundles', False)
+            # Extract parameters from query string
+            fhir_server_url = request.args.get('fhir_server_url')
+            resources = request.args.getlist('resources')
+            validate_references = request.args.get('validate_references', 'false').lower() == 'true'
+            fetch_reference_bundles = request.args.get('fetch_reference_bundles', 'false').lower() == 'true'
             
+            # Extract authentication headers
             auth_token = request.headers.get('Authorization')
             auth_type = 'bearer' if auth_token and auth_token.lower().startswith('bearer') else 'basic' if auth_token and auth_token.lower().startswith('basic') else 'none'
 
