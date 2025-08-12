@@ -5,6 +5,7 @@ CURRENT_DIR = os.path.abspath(os.path.dirname(__file__))
 # Introduce app_dir variable that can be overridden by environment
 app_dir = os.environ.get('APP_DIR', CURRENT_DIR)
 sys.path.append(CURRENT_DIR)
+#sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 import datetime
 import shutil
 import queue
@@ -2402,19 +2403,21 @@ def api_retrieve_bundles():
     output_zip = os.path.join(temp_dir, zip_filename)
 
     def generate():
-        try:
-            yield from services.retrieve_bundles(
-                fhir_server_url=fhir_server_url,
-                resources=resources,
-                output_zip=output_zip,
-                validate_references=validate_references,
-                fetch_reference_bundles=fetch_reference_bundles,
-                auth_type=auth_type,
-                auth_token=auth_token
-            )
-        except Exception as e:
-            logger.error(f"Error in retrieve_bundles: {e}", exc_info=True)
-            yield json.dumps({"type": "error", "message": f"Unexpected error: {str(e)}"}) + "\n"
+        # Push the application context manually for the generator's lifetime
+        with app.app_context():
+            try:
+                yield from services.retrieve_bundles(
+                    fhir_server_url=fhir_server_url,
+                    resources=resources,
+                    output_zip=output_zip,
+                    validate_references=validate_references,
+                    fetch_reference_bundles=fetch_reference_bundles,
+                    auth_type=auth_type,
+                    auth_token=auth_token
+                )
+            except Exception as e:
+                logger.error(f"Error in retrieve_bundles: {e}", exc_info=True)
+                yield json.dumps({"type": "error", "message": f"Unexpected error: {str(e)}"}) + "\n"
 
     response = Response(generate(), mimetype='application/x-ndjson')
     response.headers['X-Zip-Path'] = os.path.join('/tmp', zip_filename)
