@@ -4583,23 +4583,21 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
         else:
             yield json.dumps({"type": "info", "message": "Reference fetching OFF"}) + "\n"
 
-        # Determine Base URL and Headers for Proxy
-        base_proxy_url = f"{current_app.config['APP_BASE_URL'].rstrip('/')}/fhir"
+        # Determine Base URL and Headers for the requests.
         headers = {'Accept': 'application/fhir+json, application/fhir+xml;q=0.9, */*;q=0.8'}
 
         is_custom_url = fhir_server_url != '/fhir' and fhir_server_url is not None and fhir_server_url.startswith('http')
+        
+        final_base_url = fhir_server_url.rstrip('/') if fhir_server_url else '/fhir'
+
         if is_custom_url:
-            # NEW: Add the custom URL as a query parameter for the proxy to use.
-            # This bypasses issues where reverse proxies might strip custom headers.
-            base_proxy_url = f"{base_proxy_url}?proxy-target={fhir_server_url.rstrip('/')}"
-            
             if auth_type in ['bearer', 'basic'] and auth_token:
                 auth_display = 'Basic <redacted>' if auth_type == 'basic' else (auth_token[:10] + '...' if len(auth_token) > 10 else auth_token)
                 yield json.dumps({"type": "info", "message": f"Using {auth_type} auth with header: Authorization: {auth_display}"}) + "\n"
                 headers['Authorization'] = auth_token
             else:
                 yield json.dumps({"type": "info", "message": "Using no authentication for custom URL"}) + "\n"
-            logger.debug(f"Will use proxy with proxy-target: {fhir_server_url}")
+            logger.debug(f"Will send requests directly to: {final_base_url}")
         else:
             yield json.dumps({"type": "info", "message": "Using no authentication for local HAPI server"}) + "\n"
             logger.debug("Will use proxy targeting local HAPI server")
@@ -4607,25 +4605,24 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
         # Fetch Initial Bundles
         initial_bundle_files = []
         for resource_type in resources:
-            #url = f"{base_proxy_url}/{quote(resource_type)}"
-            url = urljoin(base_proxy_url, quote(resource_type))
-            yield json.dumps({"type": "progress", "message": f"Fetching bundle for {resource_type} via proxy..."}) + "\n"
-            logger.debug(f"Sending GET request to proxy {url} with headers: {json.dumps(headers)}")
+            url = f"{final_base_url}/{quote(resource_type)}"
+            yield json.dumps({"type": "progress", "message": f"Fetching bundle for {resource_type}..."}) + "\n"
+            logger.debug(f"Sending GET request to {url} with headers: {json.dumps(headers)}")
             try:
                 response = requests.get(url, headers=headers, timeout=60)
-                logger.debug(f"Proxy response for {resource_type}: HTTP {response.status_code}")
+                logger.debug(f"Response for {resource_type}: HTTP {response.status_code}")
                 if response.status_code != 200:
-                    error_detail = f"Proxy returned HTTP {response.status_code}."
+                    error_detail = f"Server returned HTTP {response.status_code}."
                     try: error_detail += f" Body: {response.text[:200]}..."
                     except: pass
                     yield json.dumps({"type": "error", "message": f"Failed to fetch {resource_type}: {error_detail}"}) + "\n"
-                    logger.error(f"Failed to fetch {resource_type} via proxy {url}: {error_detail}")
+                    logger.error(f"Failed to fetch {resource_type} at {url}: {error_detail}")
                     continue
                 try:
                     bundle = response.json()
                 except ValueError as e:
                     yield json.dumps({"type": "error", "message": f"Invalid JSON response for {resource_type}: {str(e)}"}) + "\n"
-                    logger.error(f"Invalid JSON from proxy for {resource_type} at {url}: {e}, Response: {response.text[:500]}")
+                    logger.error(f"Invalid JSON from {resource_type} at {url}: {e}, Response: {response.text[:500]}")
                     continue
                 if not isinstance(bundle, dict) or bundle.get('resourceType') != 'Bundle':
                     yield json.dumps({"type": "error", "message": f"Expected Bundle for {resource_type}, got {bundle.get('resourceType', 'unknown')}"}) + "\n"
@@ -4648,8 +4645,8 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
                     logger.error(f"Failed to write bundle file {output_file}: {e}")
                     continue
             except requests.RequestException as e:
-                yield json.dumps({"type": "error", "message": f"Error connecting to proxy for {resource_type}: {str(e)}"}) + "\n"
-                logger.error(f"Error retrieving bundle for {resource_type} via proxy {url}: {e}")
+                yield json.dumps({"type": "error", "message": f"Error connecting to server for {resource_type}: {str(e)}"}) + "\n"
+                logger.error(f"Error retrieving bundle for {resource_type} via {url}: {e}")
                 continue
             except Exception as e:
                 yield json.dumps({"type": "error", "message": f"Unexpected error fetching {resource_type}: {str(e)}"}) + "\n"
@@ -4699,18 +4696,18 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
                         if ref_type in retrieved_references_or_types:
                             continue
 
-                        url = f"{base_proxy_url}/{quote(ref_type)}"
-                        yield json.dumps({"type": "progress", "message": f"Fetching full bundle for type {ref_type} via proxy..."}) + "\n"
-                        logger.debug(f"Sending GET request for full type bundle {ref_type} to proxy {url} with headers: {json.dumps(headers)}")
+                        url = f"{final_base_url}/{quote(ref_type)}"
+                        yield json.dumps({"type": "progress", "message": f"Fetching full bundle for type {ref_type}..."}) + "\n"
+                        logger.debug(f"Sending GET request for full type bundle {ref_type} to {url} with headers: {json.dumps(headers)}")
                         try:
                             response = requests.get(url, headers=headers, timeout=180)
-                            logger.debug(f"Proxy response for {ref_type} bundle: HTTP {response.status_code}")
+                            logger.debug(f"Response for {ref_type} bundle: HTTP {response.status_code}")
                             if response.status_code != 200:
-                                error_detail = f"Proxy returned HTTP {response.status_code}."
+                                error_detail = f"Server returned HTTP {response.status_code}."
                                 try: error_detail += f" Body: {response.text[:200]}..."
                                 except: pass
                                 yield json.dumps({"type": "warning", "message": f"Failed to fetch full bundle for {ref_type}: {error_detail}"}) + "\n"
-                                logger.warning(f"Failed to fetch full bundle {ref_type} via proxy {url}: {error_detail}")
+                                logger.warning(f"Failed to fetch full bundle {ref_type} via {url}: {error_detail}")
                                 retrieved_references_or_types.add(ref_type)
                                 continue
 
@@ -4718,7 +4715,7 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
                                 bundle = response.json()
                             except ValueError as e:
                                 yield json.dumps({"type": "warning", "message": f"Invalid JSON for full {ref_type} bundle: {str(e)}"}) + "\n"
-                                logger.warning(f"Invalid JSON response from proxy for full {ref_type} bundle at {url}: {e}")
+                                logger.warning(f"Invalid JSON response from {ref_type} bundle at {url}: {e}")
                                 retrieved_references_or_types.add(ref_type)
                                 continue
 
@@ -4742,8 +4739,8 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
                                 logger.error(f"Failed to write full bundle file {output_file}: {e}")
                                 retrieved_references_or_types.add(ref_type)
                         except requests.RequestException as e:
-                            yield json.dumps({"type": "warning", "message": f"Error connecting to proxy for full {ref_type} bundle: {str(e)}"}) + "\n"
-                            logger.warning(f"Error retrieving full {ref_type} bundle via proxy: {e}")
+                            yield json.dumps({"type": "warning", "message": f"Error connecting to server for full {ref_type} bundle: {str(e)}"}) + "\n"
+                            logger.warning(f"Error retrieving full {ref_type} bundle via: {e}")
                             retrieved_references_or_types.add(ref_type)
                         except Exception as e:
                             yield json.dumps({"type": "warning", "message": f"Unexpected error fetching full {ref_type} bundle: {str(e)}"}) + "\n"
@@ -4765,19 +4762,19 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
                             ref_type, ref_id = ref_parts
 
                             search_param = quote(f"_id={ref_id}")
-                            url = f"{base_proxy_url}/{quote(ref_type)}?{search_param}"
-                            yield json.dumps({"type": "progress", "message": f"Fetching referenced {ref_type}/{ref_id} via proxy..."}) + "\n"
-                            logger.debug(f"Sending GET request for referenced {ref} to proxy {url} with headers: {json.dumps(headers)}")
+                            url = f"{final_base_url}/{quote(ref_type)}?{search_param}"
+                            yield json.dumps({"type": "progress", "message": f"Fetching referenced {ref_type}/{ref_id}..."}) + "\n"
+                            logger.debug(f"Sending GET request for referenced {ref} to {url} with headers: {json.dumps(headers)}")
 
                             response = requests.get(url, headers=headers, timeout=60)
-                            logger.debug(f"Proxy response for referenced {ref}: HTTP {response.status_code}")
+                            logger.debug(f"Response for referenced {ref}: HTTP {response.status_code}")
 
                             if response.status_code != 200:
-                                error_detail = f"Proxy returned HTTP {response.status_code}."
+                                error_detail = f"Server returned HTTP {response.status_code}."
                                 try: error_detail += f" Body: {response.text[:200]}..."
                                 except: pass
                                 yield json.dumps({"type": "warning", "message": f"Failed to fetch referenced {ref}: {error_detail}"}) + "\n"
-                                logger.warning(f"Failed to fetch referenced {ref} via proxy {url}: {error_detail}")
+                                logger.warning(f"Failed to fetch referenced {ref} via {url}: {error_detail}")
                                 retrieved_references_or_types.add(ref)
                                 continue
 
@@ -4785,7 +4782,7 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
                                 bundle = response.json()
                             except ValueError as e:
                                 yield json.dumps({"type": "warning", "message": f"Invalid JSON for referenced {ref}: {str(e)}"}) + "\n"
-                                logger.warning(f"Invalid JSON from proxy for ref {ref} at {url}: {e}")
+                                logger.warning(f"Invalid JSON from ref {ref} at {url}: {e}")
                                 retrieved_references_or_types.add(ref)
                                 continue
 
@@ -4815,7 +4812,7 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
                                 retrieved_references_or_types.add(ref)
                         except requests.RequestException as e:
                             yield json.dumps({"type": "warning", "message": f"Network error fetching referenced {ref}: {str(e)}"}) + "\n"
-                            logger.warning(f"Network error retrieving referenced {ref} via proxy: {e}")
+                            logger.warning(f"Network error retrieving referenced {ref} via: {e}")
                             retrieved_references_or_types.add(ref)
                         except Exception as e:
                             yield json.dumps({"type": "warning", "message": f"Unexpected error fetching referenced {ref}: {str(e)}"}) + "\n"

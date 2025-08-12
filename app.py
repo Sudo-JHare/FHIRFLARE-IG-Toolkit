@@ -1905,7 +1905,7 @@ def proxy_hapi(subpath):
     except Exception as e:
          logger.error(f"Unexpected proxy error for {final_url}: {str(e)}", exc_info=True)
          return jsonify({'resourceType': 'OperationOutcome', 'issue': [{'severity': 'error', 'code': 'exception', 'diagnostics': 'An unexpected error occurred within the FHIR proxy.', 'details': {'text': str(e)}}]}), 500
-# --- End of corrected proxy_hapi function ---
+         # --- End of corrected proxy_hapi function ---
 
 
 @app.route('/api/load-ig-to-hapi', methods=['POST'])
@@ -2337,6 +2337,7 @@ def retrieve_split_data():
     return render_template('retrieve_split_data.html', form=form, site_name='FHIRFLARE IG Toolkit',
                           now=datetime.datetime.now(), app_mode=app.config['APP_MODE'],
                           api_key=app.config['API_KEY'])
+
 
 @app.route('/api/retrieve-bundles', methods=['POST'])
 @csrf.exempt

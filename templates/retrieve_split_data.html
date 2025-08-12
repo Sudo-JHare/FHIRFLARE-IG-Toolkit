@@ -27,7 +27,7 @@
                     </ul>
                 </div>
             {% endif %}
-            <form id="retrieveForm" method="POST" enctype="multipart/form-data">
+            <form id="retrieveForm" method="POST">
                 {{ form.hidden_tag() }}
                 <div class="mb-3">
                     <label class="form-label fw-bold">FHIR Server</label>
@@ -401,52 +401,35 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('fetch_reference_bundles', 'false');
         }
 
-        const currentFhirServerUrl = useLocalHapi ? '/fhir' : fhirServerUrlInput.value.trim();
-        if (!useLocalHapi && !currentFhirServerUrl) {
-            alert('Custom FHIR Server URL is required.');
-            fhirServerUrlInput.classList.add('is-invalid');
-            retrieveButton.disabled = false;
-            if (spinner) spinner.style.display = 'none';
-            if (icon) icon.style.display = 'inline-block';
-            return;
-        }
-        formData.append('fhir_server_url', currentFhirServerUrl);
+        const currentFhirServerUrl = useLocalHapi ? null : fhirServerUrlInput.value.trim().replace(/\/+$/, '');
+        const authType = authTypeSelect?.value;
+        const authHeader = (authType === 'bearer' && bearerTokenInput?.value) ? `Bearer ${bearerTokenInput.value}`
+            : (authType === 'basic' && usernameInput?.value && passwordInput?.value) ? `Basic ${btoa(`${usernameInput.value}:${passwordInput.value}`)}`
+            : null;
 
-        // Add authentication fields for custom URL
-        if (!useLocalHapi && authTypeSelect) {
-            const authType = authTypeSelect.value;
-            formData.append('auth_type', authType);
-            if (authType === 'bearer' && bearerTokenInput) {
-                if (!bearerTokenInput.value) {
-                    alert('Please enter a Bearer Token.');
-                    retrieveButton.disabled = false;
-                    if (spinner) spinner.style.display = 'none';
-                    if (icon) icon.style.display = 'inline-block';
-                    return;
-                }
-                formData.append('bearer_token', bearerTokenInput.value);
-            } else if (authType === 'basic' && usernameInput && passwordInput) {
-                if (!usernameInput.value || !passwordInput.value) {
-                    alert('Please enter both Username and Password for Basic Authentication.');
-                    retrieveButton.disabled = false;
-                    if (spinner) spinner.style.display = 'none';
-                    if (icon) icon.style.display = 'inline-block';
-                    return;
-                }
-                formData.append('username', usernameInput.value);
-                formData.append('password', passwordInput.value);
-            }
+        const url = new URL('/api/stream-retrieve', window.location.origin);
+        if (currentFhirServerUrl) {
+            url.searchParams.set('proxy-target', currentFhirServerUrl);
+        }
+        selectedResources.forEach(res => url.searchParams.append('resource_type', res));
+        url.searchParams.set('validate_references', formData.get('validate_references'));
+        url.searchParams.set('fetch_reference_bundles', formData.get('fetch_reference_bundles'));
+
+        const headers = { 'Accept': 'application/x-ndjson' };
+        if (authHeader) {
+            headers['Authorization'] = authHeader;
+        }
+        if (csrfTokenInput) {
+            headers['X-CSRFToken'] = csrfTokenInput.value;
+        }
+        if (apiKey) {
+            headers['X-API-Key'] = apiKey;
         }
 
-        const headers = {
-            'Accept': 'application/x-ndjson',
-            'X-CSRFToken': csrfTokenInput ? csrfTokenInput.value : '',
-            'X-API-Key': apiKey
-        };
-        console.log(`Submitting retrieve request. Server: ${currentFhirServerUrl}, ValidateRefs: ${formData.get('validate_references')}, FetchRefBundles: ${formData.get('fetch_reference_bundles')}, AuthType: ${formData.get('auth_type')}`);
+        console.log(`Submitting retrieve request. URL: ${url.toString()}, Headers: ${JSON.stringify(headers)}`);
 
         try {
-            const response = await fetch('/api/retrieve-bundles', { method: 'POST', headers: headers, body: formData });
+            const response = await fetch(url.toString(), { method: 'GET', headers: headers });
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response.' }));
@@ -454,7 +437,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             retrieveZipPath = response.headers.get('X-Zip-Path');
             console.log(`Received X-Zip-Path: ${retrieveZipPath}`);
-
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
