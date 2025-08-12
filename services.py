@@ -4586,16 +4586,20 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
         # Determine Base URL and Headers for Proxy
         base_proxy_url = f"{current_app.config['APP_BASE_URL'].rstrip('/')}/fhir"
         headers = {'Accept': 'application/fhir+json, application/fhir+xml;q=0.9, */*;q=0.8'}
+
         is_custom_url = fhir_server_url != '/fhir' and fhir_server_url is not None and fhir_server_url.startswith('http')
         if is_custom_url:
-            headers['X-Target-FHIR-Server'] = fhir_server_url.rstrip('/')
+            # NEW: Add the custom URL as a query parameter for the proxy to use.
+            # This bypasses issues where reverse proxies might strip custom headers.
+            base_proxy_url = f"{base_proxy_url}?proxy-target={fhir_server_url.rstrip('/')}"
+            
             if auth_type in ['bearer', 'basic'] and auth_token:
                 auth_display = 'Basic <redacted>' if auth_type == 'basic' else (auth_token[:10] + '...' if len(auth_token) > 10 else auth_token)
                 yield json.dumps({"type": "info", "message": f"Using {auth_type} auth with header: Authorization: {auth_display}"}) + "\n"
                 headers['Authorization'] = auth_token
             else:
                 yield json.dumps({"type": "info", "message": "Using no authentication for custom URL"}) + "\n"
-            logger.debug(f"Will use proxy with X-Target-FHIR-Server: {headers['X-Target-FHIR-Server']}")
+            logger.debug(f"Will use proxy with proxy-target: {fhir_server_url}")
         else:
             yield json.dumps({"type": "info", "message": "Using no authentication for local HAPI server"}) + "\n"
             logger.debug("Will use proxy targeting local HAPI server")

@@ -1791,25 +1791,39 @@ def proxy_hapi(subpath):
     logger.debug(f"Proxy received request for path: '/fhir/{subpath}', cleaned subpath: '{clean_subpath}'")
 
     # Determine the target FHIR server base URL
+    # NEW: Check for proxy-target query parameter first
+    target_server_query = request.args.get('proxy-target')
     target_server_header = request.headers.get('X-Target-FHIR-Server')
     final_base_url = None
     is_custom_target = False
 
-    if target_server_header:
+    if target_server_query:
         try:
-             parsed_url = urlparse(target_server_header)
-             if not parsed_url.scheme or not parsed_url.netloc:
-                  raise ValueError("Invalid URL format in X-Target-FHIR-Server header")
-             final_base_url = target_server_header.rstrip('/')
-             is_custom_target = True
-             logger.info(f"Proxy target identified from header: {final_base_url}")
+            parsed_url = urlparse(target_server_query)
+            if not parsed_url.scheme or not parsed_url.netloc:
+                raise ValueError("Invalid URL format in proxy-target query parameter")
+            final_base_url = target_server_query.rstrip('/')
+            is_custom_target = True
+            logger.info(f"Proxy target identified from query parameter: {final_base_url}")
         except ValueError as e:
-             logger.warning(f"Invalid URL in X-Target-FHIR-Server header: '{target_server_header}'. Falling back. Error: {e}")
-             final_base_url = current_app.config['HAPI_FHIR_URL'].rstrip('/')
-             logger.debug(f"Falling back to default local HAPI due to invalid header: {final_base_url}")
+            logger.warning(f"Invalid URL in proxy-target query parameter: '{target_server_query}'. Falling back. Error: {e}")
+            final_base_url = current_app.config['HAPI_FHIR_URL'].rstrip('/')
+            logger.debug(f"Falling back to default local HAPI due to invalid query: {final_base_url}")
+    elif target_server_header:
+        try:
+            parsed_url = urlparse(target_server_header)
+            if not parsed_url.scheme or not parsed_url.netloc:
+                raise ValueError("Invalid URL format in X-Target-FHIR-Server header")
+            final_base_url = target_server_header.rstrip('/')
+            is_custom_target = True
+            logger.info(f"Proxy target identified from header: {final_base_url}")
+        except ValueError as e:
+            logger.warning(f"Invalid URL in X-Target-FHIR-Server header: '{target_server_header}'. Falling back. Error: {e}")
+            final_base_url = current_app.config['HAPI_FHIR_URL'].rstrip('/')
+            logger.debug(f"Falling back to default local HAPI due to invalid header: {final_base_url}")
     else:
         final_base_url = current_app.config['HAPI_FHIR_URL'].rstrip('/')
-        logger.debug(f"No target header found, proxying to default local HAPI: {final_base_url}")
+        logger.debug(f"No target info found, proxying to default local HAPI: {final_base_url}")
 
     # Construct the final URL for the target server request
     # Append the cleaned subpath only if it's not empty
@@ -1891,7 +1905,6 @@ def proxy_hapi(subpath):
     except Exception as e:
          logger.error(f"Unexpected proxy error for {final_url}: {str(e)}", exc_info=True)
          return jsonify({'resourceType': 'OperationOutcome', 'issue': [{'severity': 'error', 'code': 'exception', 'diagnostics': 'An unexpected error occurred within the FHIR proxy.', 'details': {'text': str(e)}}]}), 500
-
 # --- End of corrected proxy_hapi function ---
 
 
