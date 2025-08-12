@@ -4583,13 +4583,11 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
         else:
             yield json.dumps({"type": "info", "message": "Reference fetching OFF"}) + "\n"
 
-        # Determine Base URL and Headers for the requests.
+        # Determine the final base URL for requests.
+        final_base_url = fhir_server_url.rstrip('/') if fhir_server_url and fhir_server_url != '/fhir' else app.config.get('HAPI_FHIR_URL', 'http://localhost:8080/fhir')
         headers = {'Accept': 'application/fhir+json, application/fhir+xml;q=0.9, */*;q=0.8'}
 
         is_custom_url = fhir_server_url != '/fhir' and fhir_server_url is not None and fhir_server_url.startswith('http')
-        
-        final_base_url = fhir_server_url.rstrip('/') if fhir_server_url else '/fhir'
-
         if is_custom_url:
             if auth_type in ['bearer', 'basic'] and auth_token:
                 auth_display = 'Basic <redacted>' if auth_type == 'basic' else (auth_token[:10] + '...' if len(auth_token) > 10 else auth_token)
@@ -4600,7 +4598,7 @@ def retrieve_bundles(fhir_server_url, resources, output_zip, validate_references
             logger.debug(f"Will send requests directly to: {final_base_url}")
         else:
             yield json.dumps({"type": "info", "message": "Using no authentication for local HAPI server"}) + "\n"
-            logger.debug("Will use proxy targeting local HAPI server")
+            logger.debug("Will use local HAPI server")
 
         # Fetch Initial Bundles
         initial_bundle_files = []

@@ -1905,7 +1905,49 @@ def proxy_hapi(subpath):
     except Exception as e:
          logger.error(f"Unexpected proxy error for {final_url}: {str(e)}", exc_info=True)
          return jsonify({'resourceType': 'OperationOutcome', 'issue': [{'severity': 'error', 'code': 'exception', 'diagnostics': 'An unexpected error occurred within the FHIR proxy.', 'details': {'text': str(e)}}]}), 500
-         # --- End of corrected proxy_hapi function ---
+
+
+@app.route('/api/stream-retrieve', methods=['GET'])
+def stream_retrieve_bundles():
+    """
+    Handles streaming FHIR bundle retrieval. This endpoint directly calls the service function,
+    bypassing the proxy to avoid conflicts. It receives the target URL,
+    resources, and other parameters from the front-end via URL query parameters.
+    """
+    def generate_stream():
+        # Push the application context manually for the generator's lifetime
+        with app.app_context():
+            # Extract parameters from query string
+            fhir_server_url = request.args.get('fhir_server_url')
+            resources = request.args.getlist('resources')
+            validate_references = request.args.get('validate_references', 'false').lower() == 'true'
+            fetch_reference_bundles = request.args.get('fetch_reference_bundles', 'false').lower() == 'true'
+            
+            # Extract authentication headers
+            auth_token = request.headers.get('Authorization')
+            auth_type = 'bearer' if auth_token and auth_token.lower().startswith('bearer') else 'basic' if auth_token and auth_token.lower().startswith('basic') else 'none'
+
+            temp_dir = tempfile.gettempdir()
+            zip_filename = f"retrieved_bundles_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
+            output_zip = os.path.join(temp_dir, zip_filename)
+
+            try:
+                yield from services.retrieve_bundles(
+                    fhir_server_url=fhir_server_url,
+                    resources=resources,
+                    output_zip=output_zip,
+                    validate_references=validate_references,
+                    fetch_reference_bundles=fetch_reference_bundles,
+                    auth_type=auth_type,
+                    auth_token=auth_token
+                )
+            except Exception as e:
+                logger.error(f"Error in retrieve_bundles: {e}", exc_info=True)
+                yield json.dumps({"type": "error", "message": f"Unexpected error: {str(e)}"}) + "\n"
+
+    response = Response(generate_stream(), mimetype='application/x-ndjson')
+    response.headers['X-Zip-Path'] = os.path.join('/tmp', zip_filename)
+    return response
 
 
 @app.route('/api/load-ig-to-hapi', methods=['POST'])
@@ -2337,7 +2379,6 @@ def retrieve_split_data():
     return render_template('retrieve_split_data.html', form=form, site_name='FHIRFLARE IG Toolkit',
                           now=datetime.datetime.now(), app_mode=app.config['APP_MODE'],
                           api_key=app.config['API_KEY'])
-
 
 @app.route('/api/retrieve-bundles', methods=['POST'])
 @csrf.exempt

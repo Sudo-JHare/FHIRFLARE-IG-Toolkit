@@ -383,8 +383,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (icon) icon.style.display = 'inline-block';
             return;
         }
-        
-        const currentFhirServerUrl = useLocalHapi ? '/fhir' : fhirServerUrlInput.value.trim().replace(/\/+$/, '');
+
+        const currentFhirServerUrl = useLocalHapi ? null : fhirServerUrlInput.value.trim().replace(/\/+$/, '');
         if (!useLocalHapi && !currentFhirServerUrl) {
             alert('Custom FHIR Server URL is required.');
             fhirServerUrlInput.classList.add('is-invalid');
@@ -407,7 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentFhirServerUrl) {
             url.searchParams.set('proxy-target', currentFhirServerUrl);
         }
-        selectedResources.forEach(res => url.searchParams.append('resource_type', res));
+        selectedResources.forEach(res => url.searchParams.append('resources', res));
         url.searchParams.set('validate_references', validateReferences);
         url.searchParams.set('fetch_reference_bundles', fetchReferenceBundles);
 
@@ -428,7 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Submitting retrieve request. URL: ${url.toString()}, Headers: ${JSON.stringify(headers)}`);
 
         try {
-            const response = await fetch(url.toString(), { method: 'POST', headers: headers });
+            const response = await fetch(url.toString(), { method: 'GET', headers: headers });
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response.' }));
@@ -647,25 +647,23 @@ document.addEventListener('DOMContentLoaded', () => {
             link.download = 'split_resources.zip';
             document.body.appendChild(link);
             link.click();
-            document.body.removeChild(link);
-            setTimeout(() => {
-                const csrfToken = splitForm.querySelector('input[name="csrf_token"]')?.value || '';
-                fetch('/clear-session', { method: 'POST', headers: { 'X-CSRFToken': csrfToken }})
-                    .then(() => console.log("Session clear requested after split download."))
-                    .catch(err => console.error("Session clear failed:", err));
-                downloadSplitButton.style.display = 'none';
-                splitZipPath = null;
-            }, 500);
-        } else {
-            console.error("No split ZIP path available for download");
-            alert("Download error: No file path available.");
-        }
-    });
-
-    // --- Initial Setup Calls ---
-    updateBundleSourceUI();
-    updateServerToggleUI();
-    toggleFetchReferenceBundles();
+document.body.removeChild(link);
+setTimeout(() => {
+const csrfToken = splitForm.querySelector('input[name="csrf_token"]')?.value || '';
+fetch('/clear-session', { method: 'POST', headers: { 'X-CSRFToken': csrfToken }})
+.then(() => console.log("Session clear requested after split download."))
+.catch(err => console.error("Session clear failed:", err));
+downloadSplitButton.style.display = 'none';
+splitZipPath = null;
+}, 500);
+} else {
+console.error("No split ZIP path available for download");
+alert("Download error: No file path available.");
+}
+});
+updateBundleSourceUI();
+updateServerToggleUI();
+toggleFetchReferenceBundles();
 });
 </script>
 {% endblock %}
