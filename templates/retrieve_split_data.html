@@ -181,6 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let retrieveZipPath = null;
     let splitZipPath = null;
     let fetchedMetadataCache = null;
+    let eventSource = null;
 
     // --- Helper Functions ---
     const sanitizeText = (str) => str ? String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
@@ -382,43 +383,41 @@ document.addEventListener('DOMContentLoaded', () => {
             if (icon) icon.style.display = 'inline-block';
             return;
         }
-
-        const formData = new FormData();
-        const csrfTokenInput = retrieveForm.querySelector('input[name="csrf_token"]');
-        if (csrfTokenInput) formData.append('csrf_token', csrfTokenInput.value);
-        selectedResources.forEach(res => formData.append('resources', res));
-
-        if (validateReferencesCheckbox) {
-            formData.append('validate_references', validateReferencesCheckbox.checked ? 'true' : 'false');
-        }
-        if (fetchReferenceBundlesCheckbox) {
-            if (validateReferencesCheckbox && validateReferencesCheckbox.checked) {
-                formData.append('fetch_reference_bundles', fetchReferenceBundlesCheckbox.checked ? 'true' : 'false');
-            } else {
-                formData.append('fetch_reference_bundles', 'false');
-            }
-        } else {
-            formData.append('fetch_reference_bundles', 'false');
+        
+        const currentFhirServerUrl = useLocalHapi ? '/fhir' : fhirServerUrlInput.value.trim().replace(/\/+$/, '');
+        if (!useLocalHapi && !currentFhirServerUrl) {
+            alert('Custom FHIR Server URL is required.');
+            fhirServerUrlInput.classList.add('is-invalid');
+            retrieveButton.disabled = false;
+            if (spinner) spinner.style.display = 'none';
+            if (icon) icon.style.display = 'inline-block';
+            return;
         }
 
-        const currentFhirServerUrl = useLocalHapi ? null : fhirServerUrlInput.value.trim().replace(/\/+$/, '');
         const authType = authTypeSelect?.value;
         const authHeader = (authType === 'bearer' && bearerTokenInput?.value) ? `Bearer ${bearerTokenInput.value}`
             : (authType === 'basic' && usernameInput?.value && passwordInput?.value) ? `Basic ${btoa(`${usernameInput.value}:${passwordInput.value}`)}`
             : null;
+        
+        const validateReferences = validateReferencesCheckbox?.checked ? 'true' : 'false';
+        const fetchReferenceBundles = validateReferences === 'true' && fetchReferenceBundlesCheckbox?.checked ? 'true' : 'false';
 
+        // --- Stream the logs directly from the server ---
         const url = new URL('/api/stream-retrieve', window.location.origin);
         if (currentFhirServerUrl) {
             url.searchParams.set('proxy-target', currentFhirServerUrl);
         }
         selectedResources.forEach(res => url.searchParams.append('resource_type', res));
-        url.searchParams.set('validate_references', formData.get('validate_references'));
-        url.searchParams.set('fetch_reference_bundles', formData.get('fetch_reference_bundles'));
+        url.searchParams.set('validate_references', validateReferences);
+        url.searchParams.set('fetch_reference_bundles', fetchReferenceBundles);
 
-        const headers = { 'Accept': 'application/x-ndjson' };
+        const headers = {
+            'Accept': 'application/x-ndjson',
+        };
         if (authHeader) {
             headers['Authorization'] = authHeader;
         }
+        const csrfTokenInput = retrieveForm.querySelector('input[name="csrf_token"]');
         if (csrfTokenInput) {
             headers['X-CSRFToken'] = csrfTokenInput.value;
         }
@@ -429,7 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Submitting retrieve request. URL: ${url.toString()}, Headers: ${JSON.stringify(headers)}`);
 
         try {
-            const response = await fetch(url.toString(), { method: 'GET', headers: headers });
+            const response = await fetch(url.toString(), { method: 'POST', headers: headers });
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response.' }));
