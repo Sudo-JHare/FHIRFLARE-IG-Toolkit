@@ -1,6 +1,6 @@
 # forms.py
 from flask_wtf import FlaskForm
-from wtforms import StringField, SelectField, TextAreaField, BooleanField, SubmitField, FileField, PasswordField
+from wtforms import StringField, SelectField, TextAreaField, BooleanField, SubmitField, FileField, PasswordField, SelectMultipleField
 from wtforms.validators import DataRequired, Regexp, ValidationError, URL, Optional, InputRequired
 from flask import request
 import json
@@ -307,3 +307,8 @@ class FhirRequestForm(FlaskForm):
                     self.basic_auth_password.errors.append('Password is required for Basic Authentication with a custom URL.')
                     return False
         return True
+
+class IgYamlForm(FlaskForm):
+    """Form to select IGs for YAML generation."""
+    igs = SelectMultipleField('Select IGs to include', validators=[DataRequired()])
+    generate_yaml = SubmitField('Generate YAML')

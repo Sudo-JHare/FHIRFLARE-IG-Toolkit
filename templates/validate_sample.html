@@ -1,4 +1,3 @@
-<!-- templates/validate_sample.html -->
 {% extends "base.html" %}
 
 {% block content %}
@@ -7,14 +6,15 @@
     <h1 class="display-5 fw-bold text-body-emphasis">Validate FHIR Sample</h1>
     <div class="col-lg-6 mx-auto">
         <p class="lead mb-4">
-            Validate a FHIR resource or bundle against a selected Implementation Guide. (ALPHA - TEST Fhir pathing is complex and the logic is WIP, please report anomalies you find in Github issues alongside your sample json REMOVE PHI)
+            Validate a FHIR resource or bundle against a selected Implementation Guide.
         </p>
-          <!-----------------------------------------------------------------remove the buttons-----------------------------------------------------
-        <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
-            <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg px-4 gap-3">Back to Home</a>
-            <a href="{{ url_for('view_igs') }}" class="btn btn-outline-secondary btn-lg px-4">Manage FHIR Packages</a>
-        </div>
-          ----------------------------------------------------------------remove the buttons----------------------------------------------------->
+    </div>
+</div>
+
+<div id="spinner-overlay" class="d-none position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex align-items-center justify-content-center" style="z-index: 1050;">
+    <div class="text-center text-white">
+        <div id="spinner-animation" style="width: 200px; height: 200px;"></div>
+        <p class="mt-3" id="spinner-message">Waiting, don't leave this page...</p>
     </div>
 </div>
 
@@ -71,7 +71,10 @@
                         <div class="text-danger">{{ error }}</div>
                     {% endfor %}
                 </div>
-                <button type="button" class="btn btn-primary" id="validateButton">Validate</button>
+                <div class="d-flex justify-content-between">
+                    <button type="button" class="btn btn-primary" id="validateButton">Validate</button>
+                    <button type="button" class="btn btn-secondary d-none" id="clearResultsButton">Clear Results</button>
+                </div>
             </form>
         </div>
     </div>
@@ -79,119 +82,326 @@
     <div class="card mt-4" id="validationResult" style="display: none;">
         <div class="card-header">Validation Report</div>
         <div class="card-body" id="validationContent">
-            <!-- Results will be populated dynamically -->
-        </div>
+            </div>
     </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/lottie.min.js') }}"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const packageSelect = document.getElementById('packageSelect');
-    const packageNameInput = document.getElementById('{{ form.package_name.id }}');
-    const versionInput = document.getElementById('{{ form.version.id }}');
-    const validateButton = document.getElementById('validateButton');
-    const sampleInput = document.getElementById('{{ form.sample_input.id }}');
-    const validationResult = document.getElementById('validationResult');
-    const validationContent = document.getElementById('validationContent');
-
-    // Debug DOM elements
-    console.log('Package Select:', packageSelect ? 'Found' : 'Missing');
-    console.log('Package Name Input:', packageNameInput ? 'Found' : 'Missing');
-    console.log('Version Input:', versionInput ? 'Found' : 'Missing');
-
-    // Update package_name and version fields from dropdown
-    function updatePackageFields(select) {
-        const value = select.value;
-        console.log('Selected package:', value);
-        if (!packageNameInput || !versionInput) {
-            console.error('Input fields not found');
-            return;
+    // --- Global Variables and Helper Functions ---
+    let currentLottieAnimation = null;
+    let pollInterval = null;
+    const spinnerOverlay = document.getElementById('spinner-overlay');
+    const spinnerMessage = document.getElementById('spinner-message');
+    const spinnerContainer = document.getElementById('spinner-animation');
+    
+    // Function to load the Lottie animation based on theme
+    function loadLottieAnimation(theme) {
+        if (currentLottieAnimation) {
+            currentLottieAnimation.destroy();
+            currentLottieAnimation = null;
         }
-        if (value) {
-            const [name, version] = value.split('#');
-            if (name && version) {
-                packageNameInput.value = name;
-                versionInput.value = version;
-                console.log('Updated fields:', { packageName: name, version });
+        const animationPath = (theme === 'dark')
+            ? '{{ url_for('static', filename='animations/Validation abstract.json') }}'
+            : '{{ url_for('static', filename='animations/Validation abstract.json') }}';
+        
+        try {
+            currentLottieAnimation = lottie.loadAnimation({
+                container: spinnerContainer,
+                renderer: 'svg',
+                loop: true,
+                autoplay: true,
+                path: animationPath
+            });
+        } catch(lottieError) {
+            console.error("Error loading Lottie animation:", lottieError);
+        }
+    }
+
+    // Function to show/hide the spinner with a custom message
+    function toggleSpinner(show, message = "Running validator...") {
+        if (show) {
+            spinnerMessage.textContent = message;
+            spinnerOverlay.classList.remove('d-none');
+            const currentTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+            loadLottieAnimation(currentTheme);
+        } else {
+            spinnerOverlay.classList.add('d-none');
+            if (currentLottieAnimation) {
+                currentLottieAnimation.destroy();
+                currentLottieAnimation = null;
+            }
+        }
+    }
+
+    // --- Frontend logic starts here
+    document.addEventListener('DOMContentLoaded', function() {
+        const packageSelect = document.getElementById('packageSelect');
+        const packageNameInput = document.getElementById('{{ form.package_name.id }}');
+        const versionInput = document.getElementById('{{ form.version.id }}');
+        const validateButton = document.getElementById('validateButton');
+        const clearResultsButton = document.getElementById('clearResultsButton');
+        const sampleInput = document.getElementById('{{ form.sample_input.id }}');
+        const validationResult = document.getElementById('validationResult');
+        const validationContent = document.getElementById('validationContent');
+        const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+        const perPage = 10;
+
+        function updatePackageFields(select) {
+            const value = select.value;
+            if (!packageNameInput || !versionInput) return;
+            if (value) {
+                const [name, version] = value.split('#');
+                if (name && version) {
+                    packageNameInput.value = name;
+                    versionInput.value = version;
+                } else {
+                    packageNameInput.value = '';
+                    versionInput.value = '';
+                }
             } else {
-                console.warn('Invalid package format:', value);
                 packageNameInput.value = '';
                 versionInput.value = '';
             }
-        } else {
-            packageNameInput.value = '';
-            versionInput.value = '';
-            console.log('Cleared fields: no package selected');
         }
-    }
 
-    // Initialize dropdown based on form values
-    if (packageNameInput && versionInput && packageNameInput.value && versionInput.value) {
-        const currentValue = `${packageNameInput.value}#${versionInput.value}`;
-        if (packageSelect.querySelector(`option[value="${currentValue}"]`)) {
-            packageSelect.value = currentValue;
-            console.log('Initialized dropdown with:', currentValue);
-        }
-    }
-
-    // Debug dropdown options
-    console.log('Dropdown options:', Array.from(packageSelect.options).map(opt => opt.value));
-
-    // Attach event listener for package selection
-    if (packageSelect) {
-        packageSelect.addEventListener('change', function() {
-            updatePackageFields(this);
-        });
-    }
-
-    // Client-side JSON validation preview
-    if (sampleInput) {
-        sampleInput.addEventListener('input', function() {
-            try {
-                if (this.value.trim()) {
-                    JSON.parse(this.value);
-                    this.classList.remove('is-invalid');
-                    this.classList.add('is-valid');
-                } else {
-                    this.classList.remove('is-valid', 'is-invalid');
-                }
-            } catch (e) {
-                this.classList.remove('is-valid');
-                this.classList.add('is-invalid');
+        if (packageNameInput.value && versionInput.value) {
+            const currentValue = `${packageNameInput.value}#${versionInput.value}`;
+            const optionExists = Array.from(packageSelect.options).some(opt => opt.value === currentValue);
+            if (optionExists) {
+                packageSelect.value = currentValue;
             }
-        });
-    }
+        }
 
-    // Check HAPI server status
-    function checkHapiStatus() {
-        return fetch('/fhir/metadata', { method: 'GET' })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('HAPI server unavailable');
-                }
-                return true;
-            })
-            .catch(error => {
-                console.warn('HAPI status check failed:', error.message);
-                validationContent.innerHTML = '<div class="alert alert-warning">HAPI server unavailable; using local validation.</div>';
-                return false;
+        if (packageSelect) {
+            packageSelect.addEventListener('change', function() {
+                updatePackageFields(this);
             });
-    }
+        }
 
-    // Sanitize text to prevent XSS
-    function sanitizeText(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
+        if (sampleInput) {
+            sampleInput.addEventListener('input', function() {
+                try {
+                    if (this.value.trim()) {
+                        JSON.parse(this.value);
+                        this.classList.remove('is-invalid');
+                        this.classList.add('is-valid');
+                    } else {
+                        this.classList.remove('is-valid', 'is-invalid');
+                    }
+                } catch (e) {
+                    this.classList.remove('is-valid');
+                    this.classList.add('is-invalid');
+                }
+            });
+        }
 
-    // Validate button handler
-    if (validateButton) {
-        validateButton.addEventListener('click', function() {
+        function sanitizeText(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Tidy up the display by paginating results
+        function renderResultList(container, items, title, isWarnings = false) {
+            container.innerHTML = '';
+            if (items.length === 0) {
+                return;
+            }
+
+            const wrapper = document.createElement('div');
+            const listId = `list-${title.toLowerCase()}`;
+
+            let initialItems = items.slice(0, perPage);
+            let remainingItems = items.slice(perPage);
+
+            const titleElement = document.createElement('h5');
+            titleElement.textContent = title;
+            wrapper.appendChild(titleElement);
+            
+            const ul = document.createElement('ul');
+            ul.className = 'list-unstyled';
+            initialItems.forEach(item => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <div class="alert alert-${isWarnings ? 'warning' : 'danger'}">
+                        ${sanitizeText(typeof item === 'string' ? item : item.message || item.issue)}
+                        ${isWarnings && item.includes('Must Support') ? ' <i class="bi bi-info-circle" title="This element is marked as Must Support in the profile."></i>' : ''}
+                    </div>
+                `;
+                ul.appendChild(li);
+            });
+            wrapper.appendChild(ul);
+
+            if (remainingItems.length > 0) {
+                const toggleButton = document.createElement('a');
+                toggleButton.href = '#';
+                toggleButton.className = 'btn btn-sm btn-link text-decoration-none';
+                toggleButton.textContent = `Show More (${remainingItems.length} more)`;
+                
+                const remainingUl = document.createElement('ul');
+                remainingUl.className = 'list-unstyled d-none';
+                remainingItems.forEach(item => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                        <div class="alert alert-${isWarnings ? 'warning' : 'danger'}">
+                            ${sanitizeText(typeof item === 'string' ? item : item.message || item.issue)}
+                            ${isWarnings && item.includes('Must Support') ? ' <i class="bi bi-info-circle" title="This element is marked as Must Support in the profile."></i>' : ''}
+                        </div>
+                    `;
+                    remainingUl.appendChild(li);
+                });
+
+                toggleButton.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (remainingUl.classList.contains('d-none')) {
+                        remainingUl.classList.remove('d-none');
+                        toggleButton.textContent = 'Show Less';
+                    } else {
+                        remainingUl.classList.add('d-none');
+                        toggleButton.textContent = `Show More (${remainingItems.length} more)`;
+                    }
+                });
+                wrapper.appendChild(toggleButton);
+                wrapper.appendChild(remainingUl);
+            }
+            container.appendChild(wrapper);
+        }
+
+        function displayFinalReport(data) {
+            validationContent.innerHTML = '';
+            let hasContent = false;
+            
+            clearResultsButton.classList.remove('d-none');
+
+            if (data.file_paths) {
+                const jsonFileName = data.file_paths.json.split('/').pop();
+                const htmlFileName = data.file_paths.html.split('/').pop();
+                const downloadDiv = document.createElement('div');
+                downloadDiv.className = 'alert alert-info d-flex justify-content-between align-items-center';
+                downloadDiv.innerHTML = `
+                    <span>Download Raw Reports:</span>
+                    <div>
+                        <a href="/download/${jsonFileName}" class="btn btn-sm btn-secondary me-2" download>Download JSON</a>
+                        <a href="/download/${htmlFileName}" class="btn btn-sm btn-secondary" download>Download HTML</a>
+                    </div>
+                `;
+                validationContent.appendChild(downloadDiv);
+                hasContent = true;
+            }
+
+            if (data.errors && data.errors.length > 0) {
+                hasContent = true;
+                const errorContainer = document.createElement('div');
+                renderResultList(errorContainer, data.errors, 'Errors');
+                validationContent.appendChild(errorContainer);
+            }
+
+            if (data.warnings && data.warnings.length > 0) {
+                hasContent = true;
+                const warningContainer = document.createElement('div');
+                renderResultList(warningContainer, data.warnings, 'Warnings', true);
+                validationContent.appendChild(warningContainer);
+            }
+
+            if (data.results) {
+                hasContent = true;
+                const resultsDiv = document.createElement('div');
+                resultsDiv.innerHTML = '<h5>Detailed Results</h5>';
+                let index = 0;
+                for (const [resourceId, result] of Object.entries(data.results)) {
+                    const collapseId = `result-collapse-${index++}`;
+                    resultsDiv.innerHTML += `
+                        <div class="card mb-2">
+                            <div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
+                                <h6 class="mb-0">${sanitizeText(resourceId)}</h6>
+                                <p class="mb-0"><strong>Valid:</strong> ${result.valid ? 'Yes' : 'No'}</p>
+                            </div>
+                            <div id="${collapseId}" class="collapse">
+                                <div class="card-body">
+                                    ${result.details && result.details.length > 0 ? `
+                                        <ul>
+                                            ${result.details.map(d => `
+                                                <li class="${d.severity === 'error' ? 'text-danger' : d.severity === 'warning' ? 'text-warning' : 'text-info'}">
+                                                    ${sanitizeText(d.issue)}
+                                                    ${d.description && d.description !== d.issue ? `<br><small class="text-muted">${sanitizeText(d.description)}</small>` : ''}
+                                                </li>
+                                            `).join('')}
+                                        </ul>
+                                    ` : '<p>No additional details.</p>'}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                validationContent.appendChild(resultsDiv);
+            }
+
+            if (data.summary) {
+                const summaryDiv = document.createElement('div');
+                summaryDiv.className = 'alert alert-info';
+                summaryDiv.innerHTML = `
+                    <h5>Summary</h5>
+                    <p>Valid: ${data.valid ? 'Yes' : 'No'}</p>
+                    <p>Errors: ${data.summary.error_count || 0}, Warnings: ${data.summary.warning_count || 0}</p>
+                `;
+                validationContent.appendChild(summaryDiv);
+                hasContent = true;
+            }
+
+            if (!hasContent && data.valid) {
+                validationContent.innerHTML = '<div class="alert alert-success">Validation passed with no errors or warnings.</div>';
+            }
+
+            document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(el => {
+                el.addEventListener('click', () => {
+                    const target = document.querySelector(el.getAttribute('data-bs-target'));
+                    target.classList.toggle('show');
+                });
+            });
+            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+                new bootstrap.Tooltip(el);
+            });
+        }
+
+        function checkValidationStatus(taskId) {
+            fetch(`/api/check-validation-status/${taskId}`)
+                .then(response => {
+                    if (response.status === 202) {
+                        console.log('Validation still in progress...');
+                        return null; 
+                    } else if (response.status === 200) {
+                        clearInterval(pollInterval);
+                        toggleSpinner(false);
+                        return response.json();
+                    } else {
+                        clearInterval(pollInterval);
+                        toggleSpinner(false);
+                        return response.json().then(errorData => {
+                            throw new Error(errorData.message);
+                        });
+                    }
+                })
+                .then(data => {
+                    if (data && data.status === 'complete') {
+                        validationResult.style.display = 'block';
+                        displayFinalReport(data.result);
+                    }
+                })
+                .catch(error => {
+                    clearInterval(pollInterval);
+                    toggleSpinner(false);
+                    console.error('Validation failed during polling:', error);
+                    validationResult.style.display = 'block';
+                    validationContent.innerHTML = `<div class="alert alert-danger">An unexpected error occurred during validation: ${sanitizeText(error.message)}</div>`;
+                });
+        }
+        
+        function runBlockingValidation() {
             const packageName = packageNameInput.value;
             const version = versionInput.value;
             const sampleData = sampleInput.value.trim();
-            const includeDependencies = document.getElementById('{{ form.include_dependencies.id }}').checked;
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
 
             if (!packageName || !version) {
                 validationResult.style.display = 'block';
@@ -213,164 +423,74 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            validationResult.style.display = 'block';
-            validationContent.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Validating...</span></div></div>';
-
-            // Check HAPI status before validation
-            checkHapiStatus().then(() => {
-                console.log('Sending request to /api/validate-sample with:', {
+            toggleSpinner(true, "Running FHIR Validator (This may take up to 5 minutes on the first run).");
+            
+            fetch('/api/validate-sample', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
                     package_name: packageName,
                     version: version,
-                    include_dependencies: includeDependencies,
-                    sample_data_length: sampleData.length
-                });
-
-                fetch('/api/validate-sample', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ form.csrf_token._value() }}'
-                    },
-                    body: JSON.stringify({
-                        package_name: packageName,
-                        version: version,
-                        include_dependencies: includeDependencies,
-                        sample_data: sampleData
-                    })
+                    sample_data: sampleData
                 })
-                .then(response => {
-                    console.log('Server response status:', response.status, response.statusText);
-                    if (!response.ok) {
-                        return response.text().then(text => {
-                            console.error('Server response text:', text.substring(0, 200) + (text.length > 200 ? '...' : ''));
-                            throw new Error(`HTTP error ${response.status}: ${text.substring(0, 100)}...`);
-                        });
-                    }
+            })
+            .then(response => {
+                if (response.status === 202) {
                     return response.json();
-                })
-                .then(data => {
-                    console.log('Validation response:', data);
-                    validationContent.innerHTML = '';
-                    let hasContent = false;
-
-                    // Display profile information
-                    if (data.results) {
-                        const profileDiv = document.createElement('div');
-                        profileDiv.className = 'mb-3';
-                        const profiles = new Set();
-                        Object.values(data.results).forEach(result => {
-                            if (result.profile) profiles.add(result.profile);
-                        });
-                        if (profiles.size > 0) {
-                            profileDiv.innerHTML = `
-                                <h5>Validated Against Profile${profiles.size > 1 ? 's' : ''}</h5>
-                                <ul>
-                                    ${Array.from(profiles).map(p => `<li><a href="${sanitizeText(p)}" target="_blank">${sanitizeText(p.split('/').pop())}</a></li>`).join('')}
-                                </ul>
-                            `;
-                            validationContent.appendChild(profileDiv);
-                            hasContent = true;
-                        }
-                    }
-
-                    // Display errors
-                    if (data.errors && data.errors.length > 0) {
-                        hasContent = true;
-                        const errorDiv = document.createElement('div');
-                        errorDiv.className = 'alert alert-danger';
-                        errorDiv.innerHTML = `
-                            <h5>Errors</h5>
-                            <ul>
-                                ${data.errors.map(e => `<li>${sanitizeText(typeof e === 'string' ? e : e.message)}</li>`).join('')}
-                            </ul>
-                        `;
-                        validationContent.appendChild(errorDiv);
-                    }
-
-                    // Display warnings
-                    if (data.warnings && data.warnings.length > 0) {
-                        hasContent = true;
-                        const warningDiv = document.createElement('div');
-                        warningDiv.className = 'alert alert-warning';
-                        warningDiv.innerHTML = `
-                            <h5>Warnings</h5>
-                            <ul>
-                                ${data.warnings.map(w => {
-                                    const isMustSupport = w.includes('Must Support');
-                                    return `<li>${sanitizeText(typeof w === 'string' ? w : w.message)}${isMustSupport ? ' <i class="bi bi-info-circle" title="This element is marked as Must Support in the profile."></i>' : ''}</li>`;
-                                }).join('')}
-                            </ul>
-                        `;
-                        validationContent.appendChild(warningDiv);
-                    }
-
-                    // Detailed results with collapsible sections
-                    if (data.results) {
-                        hasContent = true;
-                        const resultsDiv = document.createElement('div');
-                        resultsDiv.innerHTML = '<h5>Detailed Results</h5>';
-                        let index = 0;
-                        for (const [resourceId, result] of Object.entries(data.results)) {
-                            const collapseId = `result-collapse-${index++}`;
-                            resultsDiv.innerHTML += `
-                                <div class="card mb-2">
-                                    <div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
-                                        <h6 class="mb-0">${sanitizeText(resourceId)}</h6>
-                                        <p class="mb-0"><strong>Valid:</strong> ${result.valid ? 'Yes' : 'No'}</p>
-                                    </div>
-                                    <div id="${collapseId}" class="collapse">
-                                        <div class="card-body">
-                                            ${result.details && result.details.length > 0 ? `
-                                                <ul>
-                                                    ${result.details.map(d => `
-                                                        <li class="${d.severity === 'error' ? 'text-danger' : d.severity === 'warning' ? 'text-warning' : 'text-info'}">
-                                                            ${sanitizeText(d.issue)}
-                                                            ${d.description && d.description !== d.issue ? `<br><small class="text-muted">${sanitizeText(d.description)}</small>` : ''}
-                                                        </li>
-                                                    `).join('')}
-                                                </ul>
-                                            ` : '<p>No additional details.</p>'}
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                        }
-                        validationContent.appendChild(resultsDiv);
-                    }
-
-                    // Summary
-                    const summaryDiv = document.createElement('div');
-                    summaryDiv.className = 'alert alert-info';
-                    summaryDiv.innerHTML = `
-                        <h5>Summary</h5>
-                        <p>Valid: ${data.valid ? 'Yes' : 'No'}</p>
-                        <p>Errors: ${data.summary.error_count || 0}, Warnings: ${data.summary.warning_count || 0}</p>
-                    `;
-                    validationContent.appendChild(summaryDiv);
-                    hasContent = true;
-
-                    if (!hasContent && data.valid) {
-                        validationContent.innerHTML = '<div class="alert alert-success">Validation passed with no errors or warnings.</div>';
-                    }
-
-                    // Initialize Bootstrap collapse and tooltips
-                    document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(el => {
-                        el.addEventListener('click', () => {
-                            const target = document.querySelector(el.getAttribute('data-bs-target'));
-                            target.classList.toggle('show');
-                        });
+                } else {
+                    toggleSpinner(false);
+                    return response.json().then(errorData => {
+                        throw new Error(errorData.message);
                     });
-                    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
-                        new bootstrap.Tooltip(el);
-                    });
-                })
-                .catch(error => {
-                    console.error('Validation error:', error);
-                    validationContent.innerHTML = `<div class="alert alert-danger">Error during validation: ${sanitizeText(error.message)}</div>`;
-                });
+                }
+            })
+            .then(data => {
+                if (data.status === 'accepted' && data.task_id) {
+                    pollInterval = setInterval(() => checkValidationStatus(data.task_id), 3000);
+                } else {
+                    toggleSpinner(false);
+                    validationResult.style.display = 'block';
+                    validationContent.innerHTML = `<div class="alert alert-danger">Server response format unexpected.</div>`;
+                }
+            })
+            .catch(error => {
+                clearInterval(pollInterval);
+                toggleSpinner(false);
+                console.error('Validation failed:', error);
+                validationResult.style.display = 'block';
+                validationContent.innerHTML = `<div class="alert alert-danger">An unexpected error occurred: ${sanitizeText(error.message)}</div>`;
+            });
+        }
+        
+        clearResultsButton.addEventListener('click', function() {
+            fetch('/api/clear-validation-results', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    validationResult.style.display = 'none';
+                    clearResultsButton.classList.add('d-none');
+                } else {
+                    console.error('Failed to clear results:', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Network error while clearing results:', error);
             });
         });
-    }
-});
+
+        if (validateButton) {
+            validateButton.addEventListener('click', function() {
+                runBlockingValidation();
+            });
+        }
+    });
 </script>
 {% endblock %}

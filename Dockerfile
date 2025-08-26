@@ -12,6 +12,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # REMOVED pip install fhirpath from this line
 RUN npm install -g gofsh fsh-sushi
 
+# ADDED: Download the latest HL7 FHIR Validator CLI
+RUN mkdir -p /app/validator_cli
+WORKDIR /app/validator_cli
+# Download the validator JAR and a separate checksum file for verification
+RUN curl -L -o validator_cli.jar "https://github.com/hapifhir/org.hl7.fhir.core/releases/latest/download/validator_cli.jar"
+
+# Set permissions for the downloaded file
+RUN chmod 755 validator_cli.jar
+
+# Change back to the main app directory for the next steps
+WORKDIR /app
 # Set up Python environment
 WORKDIR /app
 RUN python3 -m venv /app/venv

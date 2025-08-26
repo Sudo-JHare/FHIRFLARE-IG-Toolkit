@@ -796,6 +796,9 @@
                     <li class="nav-item">
                         <a class="nav-link {{ 'active' if request.endpoint == 'fsh_converter' else '' }}" href="{{ url_for('fsh_converter') }}"><i class="fas fa-file-code me-1"></i> FSH Converter</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'ig_configurator' else '' }}" href="{{ url_for('ig_configurator') }}"><i class="fas fa-wrench me-1"></i> IG Valid-Conf Gen</a>
+                    </li>
                     {% if app_mode != 'lite' %}
                     <li class="nav-item">
                         <a class="nav-link {{ 'active' if request.endpoint == 'config_hapi' else '' }}" href="{{ url_for('config_hapi') }}"><i class="fas fa-cog me-1"></i> Configure HAPI</a>

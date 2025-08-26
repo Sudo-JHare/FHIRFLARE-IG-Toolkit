@@ -29,6 +29,7 @@ import re
 import yaml
 import threading
 import time # Add time import
+import io
 import services
 from services import (
     services_bp,
@@ -44,9 +45,12 @@ from services import (
     pkg_version,
     get_package_description,
     safe_parse_version,
-    import_manual_package_and_dependencies
+    import_manual_package_and_dependencies,
+    parse_and_list_igs, 
+    generate_ig_yaml,
+    apply_and_validate
 )
-from forms import IgImportForm, ManualIgImportForm, ValidationForm, FSHConverterForm, TestDataUploadForm, RetrieveSplitDataForm
+from forms import IgImportForm, ManualIgImportForm, ValidationForm, FSHConverterForm, TestDataUploadForm, RetrieveSplitDataForm, IgYamlForm
 from wtforms import SubmitField
 from package import package_bp
 from flasgger import Swagger, swag_from # Import Flasgger
@@ -3133,7 +3137,65 @@ def package_details_view(name):
                            package_name=actual_package_name,
                            latest_official_version=latest_official_version_str)
 
+@app.route('/ig-configurator', methods=['GET', 'POST'])
+def ig_configurator():
+    form = IgYamlForm()
+    packages_dir = current_app.config['FHIR_PACKAGES_DIR']
+    loaded_igs = services.parse_and_list_igs(packages_dir)
+    
+    form.igs.choices = [(name, f"{name} ({info['version']})") for name, info in loaded_igs.items()]
+    
+    yaml_output = None
+    
+    if form.validate_on_submit():
+        selected_ig_names = form.igs.data
+        
+        try:
+            yaml_output = generate_ig_yaml(selected_ig_names, loaded_igs)
+            flash("YAML configuration generated successfully!", "success")
+        except Exception as e:
+            flash(f"Error generating YAML: {str(e)}", "error")
+            logger.error(f"Error generating YAML: {str(e)}", exc_info=True)
 
+    return render_template('ig_configurator.html', form=form, yaml_output=yaml_output)
+
+@app.route('/download/<path:filename>')
+def download_file(filename):
+    """
+    Serves a file from the temporary directory.
+    This route is necessary to allow the user to download the validator reports.
+    """
+    # The temporary directory path is hardcoded for security
+    temp_dir = tempfile.gettempdir()
+    file_path = os.path.join(temp_dir, filename)
+
+    if not os.path.exists(file_path):
+        return jsonify({"error": "File not found."}), 404
+        
+    try:
+        # Use send_file with as_attachment=True to trigger a download
+        return send_file(file_path, as_attachment=True, download_name=filename)
+    except Exception as e:
+        logger.error(f"Error serving file {file_path}: {str(e)}")
+        return jsonify({"error": "Error serving file.", "details": str(e)}), 500
+
+@app.route('/api/clear-validation-results', methods=['POST'])
+@csrf.exempt
+def clear_validation_results():
+    """
+    Clears the temporary directory containing the last validation run's results.
+    """
+    temp_dir = current_app.config.get('VALIDATION_TEMP_DIR')
+    if temp_dir and os.path.exists(temp_dir):
+        try:
+            shutil.rmtree(temp_dir)
+            current_app.config['VALIDATION_TEMP_DIR'] = None
+            return jsonify({"status": "success", "message": f"Results cleared successfully."})
+        except Exception as e:
+            logger.error(f"Failed to clear validation results at {temp_dir}: {e}")
+            return jsonify({"status": "error", "message": f"Failed to clear results: {e}"}), 500
+    else:
+        return jsonify({"status": "success", "message": "No results to clear."})
 
 @app.route('/favicon.ico')
 def favicon():

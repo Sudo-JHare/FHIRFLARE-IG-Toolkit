@@ -18,5 +18,5 @@ services:
       - NODE_PATH=/usr/lib/node_modules
       - APP_MODE=standalone
       - APP_BASE_URL=http://localhost:5000
-      - HAPI_FHIR_URL=http://localhost:8080/fhir 
+      - HAPI_FHIR_URL=https://fhir.hl7.org.au/aucore/fhir/DEFAULT/ 
     command: supervisord -c /etc/supervisord.conf

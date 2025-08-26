@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>IG Configuration Generator</h2>
+    <p>Select the Implementation Guides you want to load into HAPI for validation. This will generate the YAML configuration required for the <code>application.yaml</code> file.</p>
+    
+    <div class="card mb-4">
+        <div class="card-header">Select IGs</div>
+        <div class="card-body">
+            <form method="POST">
+                {{ form.hidden_tag() }}
+                <div class="mb-3">
+                    <label class="form-label">IGs and their dependencies</label>
+                    {% for choice in form.igs.choices %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="igs" value="{{ choice[0] }}" id="ig-{{ choice[0] }}">
+                        <label class="form-check-label" for="ig-{{ choice[0] }}">{{ choice[1] }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+                {{ form.generate_yaml(class="btn btn-primary") }}
+            </form>
+        </div>
+    </div>
+    
+    {% if yaml_output %}
+    <div class="card mt-4">
+        <div class="card-header">Generated <code>application.yaml</code> Excerpt</div>
+        <div class="card-body">
+            <p>Copy the following configuration block and paste it into the `hapi.fhir` section of your HAPI server's <code>application.yaml</code> file.</p>
+            <pre><code class="language-yaml">{{ yaml_output }}</code></pre>
+            <div class="alert alert-warning mt-3">
+                <strong>Important:</strong> After updating the <code>application.yaml</code> file, you must **restart your HAPI server** for the changes to take effect.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
