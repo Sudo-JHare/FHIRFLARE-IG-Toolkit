@@ -6,7 +6,7 @@
     <h1 class="display-5 fw-bold text-body-emphasis">FHIR API Explorer</h1>
     <div class="col-lg-6 mx-auto">
         <p class="lead mb-4">
-            Interact with FHIR servers using GET, POST, PUT, or DELETE requests. Toggle between local HAPI or a custom server to explore resources or perform searches.
+            Interact with FHIR servers using GET, POST, PUT, or DELETE requests. Toggle between local Fhir Server or a custom server to explore resources or perform searches.
         </p>
     </div>
 </div>
@@ -21,11 +21,11 @@
                     <label class="form-label">FHIR Server</label>
                     <div class="input-group">
                         <button type="button" class="btn btn-outline-primary" id="toggleServer">
-                            <span id="toggleLabel">Use Local HAPI</span>
+                            <span id="toggleLabel">Use Local </span>
                         </button>
                         <input type="text" class="form-control" id="fhirServerUrl" name="fhir_server_url" placeholder="e.g., https://hapi.fhir.org/baseR4" style="display: none;" aria-describedby="fhirServerHelp">
                     </div>
-                    <small id="fhirServerHelp" class="form-text text-muted">Toggle to use local HAPI (http://localhost:8080/fhir) or enter a custom FHIR server URL.</small>
+                    <small id="fhirServerHelp" class="form-text text-muted">Toggle to use local (http://localhost:8080/fhir) or enter a custom FHIR server URL.</small>
                 </div>
                 <div class="mb-3" id="authSection" style="display: none;">
                     <label class="form-label">Authentication</label>

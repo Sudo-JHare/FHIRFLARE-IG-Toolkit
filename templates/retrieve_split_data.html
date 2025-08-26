@@ -33,11 +33,11 @@
                     <label class="form-label fw-bold">FHIR Server</label>
                     <div class="input-group">
                         <button type="button" class="btn btn-outline-primary" id="toggleServer">
-                            <span id="toggleLabel">Use Local HAPI</span>
+                            <span id="toggleLabel">Use Local </span>
                         </button>
                         {{ form.fhir_server_url(class="form-control", id="fhirServerUrl", style="display: none;", placeholder="e.g., https://fhir.hl7.org.au/aucore/fhir/DEFAULT", **{'aria-describedby': 'fhirServerHelp'}) }}
                     </div>
-                    <small id="fhirServerHelp" class="form-text text-muted">Toggle to use local HAPI (/fhir proxy) or enter a custom FHIR server URL.</small>
+                    <small id="fhirServerHelp" class="form-text text-muted">Toggle to use local Fhir Server(/fhir proxy) or enter a custom FHIR server URL.</small>
                 </div>
 
                 {# Authentication Section (Shown for Custom URL) #}

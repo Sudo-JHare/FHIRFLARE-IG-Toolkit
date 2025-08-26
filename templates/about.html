@@ -19,11 +19,11 @@
             <p>Whether you're downloading the latest IG versions, checking compliance, converting resources to FHIR Shorthand (FSH), or pushing guides to a test server, this toolkit aims to be an essential companion.</p>
              {% if app_mode == 'lite' %}
                 <div class="alert alert-info" role="alert">
-                    <i class="bi bi-info-circle-fill me-2"></i>You are currently running the <strong>Lite Version</strong> of the toolkit. This version excludes the built-in HAPI FHIR server and relies on external FHIR servers for functionalities like the API Explorer and Operations UI. Validation uses local StructureDefinition checks.
+                    <i class="bi bi-info-circle-fill me-2"></i>You are currently running the <strong>Lite Version</strong> of the toolkit. This version excludes the built-in FHIR server depending and relies on external FHIR servers for functionalities like the API Explorer and Operations UI. Validation uses local StructureDefinition checks.
                 </div>
              {% else %}
                  <div class="alert alert-success" role="alert">
-                     <i class="bi bi-check-circle-fill me-2"></i>You are currently running the <strong>Standalone Version</strong> of the toolkit, which includes a built-in HAPI FHIR server (accessible via the `/fhir` proxy) for local validation and exploration.
+                     <i class="bi bi-check-circle-fill me-2"></i>You are currently running the <strong>Standalone Version</strong> of the toolkit, which includes a built-in FHIR server based on your build choice (accessible via the `/fhir` proxy) for local validation and exploration, if you configured the Server ENV variable this could also be whatever customer server you have pointed the local ENV variable at allowing you to use any fhir server of your choice.
                  </div>
              {% endif %}
 
@@ -36,7 +36,7 @@
                 <li><strong>FHIR Server Interaction:</strong>
                     <ul>
                         <li>Push processed IGs (including dependencies) to a target FHIR server with real-time console feedback.</li>
-                        <li>Explore FHIR server capabilities and interact with resources using the "FHIR API Explorer" (GET/POST/PUT/DELETE) and "FHIR UI Operations" pages, supporting both the local HAPI server (in Standalone mode) and external servers.</li>
+                        <li>Explore FHIR server capabilities and interact with resources using the "FHIR API Explorer" (GET/POST/PUT/DELETE) and "FHIR UI Operations" pages, supporting both the local server (in Standalone mode) and external servers.</li>
                     </ul>
                 </li>
                 <li><strong>FHIR Shorthand (FSH) Conversion:</strong> Convert FHIR JSON or XML resources to FSH using the integrated GoFSH tool. Offers advanced options like context package selection, various output styles, FHIR version selection, dependency loading, alias file usage, and round-trip validation ("Fishing Trip") with SUSHI. Includes a loading indicator during conversion.</li>
@@ -48,7 +48,7 @@
             <ul>
                 <li><strong>Backend:</strong> Python with the Flask web framework and SQLAlchemy for database interaction (SQLite).</li>
                 <li><strong>Frontend:</strong> HTML, Bootstrap 5 for styling, and JavaScript for interactivity and dynamic content loading. Uses Lottie-Web for animations.</li>
-                <li><strong>FHIR Tooling:</strong> Integrates GoFSH and SUSHI (via Node.js) for FSH conversion and validation. Utilizes the HAPI FHIR server (in Standalone mode) for robust FHIR validation and operations.</li>
+                <li><strong>FHIR Tooling:</strong> Integrates GoFSH and SUSHI (via Node.js) for FSH conversion and validation. Utilizes the Local FHIR server (in Standalone mode) for robust FHIR validation and operations.</li>
                 <li><strong>Deployment:</strong> Runs within a Docker container managed by Docker Compose and Supervisor, ensuring a consistent environment.</li>
             </ul>
 

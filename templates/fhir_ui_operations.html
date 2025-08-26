@@ -112,7 +112,7 @@
     <h1 class="display-5 fw-bold text-body-emphasis">FHIR UI Operations</h1>
     <div class="col-lg-6 mx-auto">
         <p class="lead mb-4">
-            Explore FHIR server operations by selecting resource types or system operations. Toggle between local HAPI or a custom server to interact with FHIR metadata, resources, and server-wide operations.
+            Explore FHIR server operations by selecting resource types or system operations. Toggle between local Server or a custom server to interact with FHIR metadata, resources, and server-wide operations.
         </p>
         <!-----------------------------------------------------------------remove the buttons-----------------------------------------------------
         <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
@@ -134,11 +134,11 @@
                     <label class="form-label fw-bold">FHIR Server</label>
                     <div class="input-group">
                         <button type="button" class="btn btn-outline-primary" id="toggleServer">
-                            <span id="toggleLabel">Use Local HAPI</span>
+                            <span id="toggleLabel">Use Local </span>
                         </button>
                         <input type="text" class="form-control" id="fhirServerUrl" name="fhir_server_url" placeholder="Enter FHIR Base URL e.g., https://hapi.fhir.org/baseR4" style="display: none;" aria-describedby="fhirServerHelp">
                     </div>
-                    <small id="fhirServerHelp" class="form-text text-muted">Toggle to use local HAPI (/fhir proxy) or enter a custom FHIR server URL.</small>
+                    <small id="fhirServerHelp" class="form-text text-muted">Toggle to use local Fhir Server (/fhir proxy) or enter a custom FHIR server URL.</small>
                 </div>
                 <div class="mb-3" id="authSection" style="display: none;">
                     <label class="form-label fw-bold">Authentication</label>
