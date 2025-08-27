@@ -382,10 +382,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let fetchedMetadataCache = null;
     let operationDefinitionCache = {}; // <<< ADD THIS LINE: Cache for fetched OperationDefinitions
 
-    // <<< ADD THIS SECTION: Get App Mode >>>
-    const appMode = '{{ app_mode | default("standalone") | lower }}'; // Get mode from Flask
+    const appMode = '{{ app_mode | default("standalone") | lower }}';
+    const initialFhirServerUrl = '{{ app.config["HAPI_FHIR_URL"] | safe }}';
     console.log(`App Mode (Operations): ${appMode}`);
-    // <<< END ADD >>>
+    console.log(`Initial FHIR Server URL from config: ${initialFhirServerUrl}`);
 
     // --- Helper Functions ---
     function updateAuthInputsUI() {
@@ -1950,6 +1950,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Initial Page State Setup ---
     resourceTypesDisplayDiv.style.display = 'none';
     swaggerUiContainer.style.display = 'none';
+
+    // Check if the initial URL from config is the default local Hapi URL
+    const isInitialLocalHapi = initialFhirServerUrl.startsWith('http://localhost:8080');
+    
+    // Set the initial state based on the URL from Flask config
+    isUsingLocalHapi = isInitialLocalHapi;
+    if (!isUsingLocalHapi) {
+        // If it's a custom URL, populate the input field with it
+        fhirServerUrlInput.value = initialFhirServerUrl;
+    }
+    
     updateServerToggleUI(); // Set the initial UI state correctly based on default isUsingLocalHapi = true
 
 }); // End DOMContentLoaded Listener
