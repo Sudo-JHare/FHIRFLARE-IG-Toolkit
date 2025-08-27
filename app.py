@@ -1780,59 +1780,41 @@ def fhir_ui_operations():
 
 # Use a single route to capture everything after /fhir/
 # The 'path' converter handles slashes. 'subpath' can be empty.
-@app.route('/fhir', defaults={'subpath': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
-@app.route('/fhir/', defaults={'subpath': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
-@app.route('/fhir/<path:subpath>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+@app.route('/fhir', defaults={'subpath': ''}, methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
+@app.route('/fhir/', defaults={'subpath': ''}, methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
+@app.route('/fhir/<path:subpath>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
 def proxy_hapi(subpath):
     """
     Proxies FHIR requests to either the local HAPI server or a custom
-    target server specified by the 'X-Target-FHIR-Server' header.
-    Handles requests to /fhir/ (base, subpath='') and /fhir/<subpath>.
-    The route '/fhir' (no trailing slash) is handled separately for the UI.
+    target server specified by the 'X-Target-FHIR-Server' header or a query parameter.
     """
-    # Clean subpath just in case prefixes were somehow included
-    clean_subpath = subpath.replace('r4/', '', 1).replace('fhir/', '', 1).strip('/')
-    logger.debug(f"Proxy received request for path: '/fhir/{subpath}', cleaned subpath: '{clean_subpath}'")
+    logger.debug(f"Proxy received request for path: '/fhir/{subpath}'")
 
     # Determine the target FHIR server base URL
-    # NEW: Check for proxy-target query parameter first
     target_server_query = request.args.get('proxy-target')
     target_server_header = request.headers.get('X-Target-FHIR-Server')
     final_base_url = None
     is_custom_target = False
 
     if target_server_query:
-        try:
-            parsed_url = urlparse(target_server_query)
-            if not parsed_url.scheme or not parsed_url.netloc:
-                raise ValueError("Invalid URL format in proxy-target query parameter")
-            final_base_url = target_server_query.rstrip('/')
-            is_custom_target = True
-            logger.info(f"Proxy target identified from query parameter: {final_base_url}")
-        except ValueError as e:
-            logger.warning(f"Invalid URL in proxy-target query parameter: '{target_server_query}'. Falling back. Error: {e}")
-            final_base_url = current_app.config['HAPI_FHIR_URL'].rstrip('/')
-            logger.debug(f"Falling back to default local HAPI due to invalid query: {final_base_url}")
+        final_base_url = target_server_query.rstrip('/')
+        is_custom_target = True
+        logger.info(f"Proxy target identified from query parameter: {final_base_url}")
     elif target_server_header:
-        try:
-            parsed_url = urlparse(target_server_header)
-            if not parsed_url.scheme or not parsed_url.netloc:
-                raise ValueError("Invalid URL format in X-Target-FHIR-Server header")
-            final_base_url = target_server_header.rstrip('/')
-            is_custom_target = True
-            logger.info(f"Proxy target identified from header: {final_base_url}")
-        except ValueError as e:
-            logger.warning(f"Invalid URL in X-Target-FHIR-Server header: '{target_server_header}'. Falling back. Error: {e}")
-            final_base_url = current_app.config['HAPI_FHIR_URL'].rstrip('/')
-            logger.debug(f"Falling back to default local HAPI due to invalid header: {final_base_url}")
+        final_base_url = target_server_header.rstrip('/')
+        is_custom_target = True
+        logger.info(f"Proxy target identified from header: {final_base_url}")
     else:
         final_base_url = current_app.config['HAPI_FHIR_URL'].rstrip('/')
         logger.debug(f"No target info found, proxying to default local HAPI: {final_base_url}")
 
-    # Construct the final URL for the target server request
-    # Append the cleaned subpath only if it's not empty
-    final_url = f"{final_base_url}/{clean_subpath}" if clean_subpath else final_base_url
-
+    # Construct the final URL for the target server request. This is the core logical change.
+    # The subpath variable now correctly captures the remaining part of the URL after '/fhir/'.
+    # We construct the final URL by joining the base URL and the subpath.
+    final_url = f"{final_base_url}/{subpath}" if subpath else final_base_url
+    
+    logger.debug(f"Final URL for target server: {final_url}")
+    
     # Prepare headers to forward
     headers_to_forward = {
         k: v for k, v in request.headers.items()
