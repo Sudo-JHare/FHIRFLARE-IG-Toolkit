@@ -1,18 +1,21 @@
 #!/bin/bash
 
 # --- Configuration ---
-REPO_URL="https://github.com/hapifhir/hapi-fhir-jpaserver-starter.git"
-CLONE_DIR="hapi-fhir-jpaserver"
-SOURCE_CONFIG_DIR="hapi-fhir-Setup" # Assuming this is relative to the script's parent
+REPO_URL_HAPI="https://github.com/hapifhir/hapi-fhir-jpaserver-starter.git"
+REPO_URL_CANDLE="https://github.com/FHIR/fhir-candle.git"
+CLONE_DIR_HAPI="hapi-fhir-jpaserver"
+CLONE_DIR_CANDLE="fhir-candle"
+SOURCE_CONFIG_DIR="hapi-fhir-Setup"
 CONFIG_FILE="application.yaml"
 
 # --- Define Paths ---
-# Note: Adjust SOURCE_CONFIG_PATH if SOURCE_CONFIG_DIR is not a sibling directory
-# This assumes the script is run from a directory, and hapi-fhir-setup is at the same level
 SOURCE_CONFIG_PATH="../${SOURCE_CONFIG_DIR}/target/classes/${CONFIG_FILE}"
-DEST_CONFIG_PATH="${CLONE_DIR}/target/classes/${CONFIG_FILE}"
+DEST_CONFIG_PATH="${CLONE_DIR_HAPI}/target/classes/${CONFIG_FILE}"
 
 APP_MODE=""
+CUSTOM_FHIR_URL_VAL=""
+SERVER_TYPE=""
+CANDLE_FHIR_VERSION=""
 
 # --- Error Handling Function ---
 handle_error() {
@@ -20,25 +23,39 @@ handle_error() {
     echo "An error occurred: $1"
     echo "Script aborted."
     echo "------------------------------------"
-    # Removed 'read -p "Press Enter to exit..."' as it's not typical for non-interactive CI/CD
     exit 1
 }
 
-# === Prompt for Installation Mode ===
+# === MODIFIED: Prompt for Installation Mode ===
 get_mode_choice() {
+    echo ""
     echo "Select Installation Mode:"
-    echo "1. Standalone (Includes local HAPI FHIR Server - Requires Git & Maven)"
-    echo "2. Lite (Excludes local HAPI FHIR Server - No Git/Maven needed)"
+    echo "1. Lite (Excludes local HAPI FHIR Server - No Git/Maven/Dotnet needed)"
+    echo "2. Custom URL (Uses a custom FHIR Server - No Git/Maven/Dotnet needed)"
+    echo "3. Hapi (Includes local HAPI FHIR Server - Requires Git & Maven)"
+    echo "4. Candle (Includes local FHIR Candle Server - Requires Git & Dotnet)"
 
     while true; do
-        read -r -p "Enter your choice (1 or 2): " choice
+        read -r -p "Enter your choice (1, 2, 3, or 4): " choice
         case "$choice" in
             1)
-                APP_MODE="standalone"
+                APP_MODE="lite"
                 break
                 ;;
             2)
-                APP_MODE="lite"
+                APP_MODE="standalone"
+                get_custom_url_prompt
+                break
+                ;;
+            3)
+                APP_MODE="standalone"
+                SERVER_TYPE="hapi"
+                break
+                ;;
+            4)
+                APP_MODE="standalone"
+                SERVER_TYPE="candle"
+                get_candle_fhir_version
                 break
                 ;;
             *)
@@ -47,133 +64,242 @@ get_mode_choice() {
         esac
     done
     echo "Selected Mode: $APP_MODE"
+    echo "Server Type: $SERVER_TYPE"
     echo
 }
+
+# === NEW: Prompt for Custom URL ===
+get_custom_url_prompt() {
+    local confirmed_url=""
+    while true; do
+        echo
+        read -r -p "Please enter the custom FHIR server URL: " custom_url_input
+        echo
+        echo "You entered: $custom_url_input"
+        read -r -p "Is this URL correct? (Y/N): " confirm_url
+        if [[ "$confirm_url" =~ ^[Yy]$ ]]; then
+            confirmed_url="$custom_url_input"
+            break
+        else
+            echo "URL not confirmed. Please re-enter."
+        fi
+    done
+
+    while true; do
+        echo
+        read -r -p "Please re-enter the URL to confirm it is correct: " custom_url_input
+        if [ "$custom_url_input" = "$confirmed_url" ]; then
+            CUSTOM_FHIR_URL_VAL="$custom_url_input"
+            echo
+            echo "Custom URL confirmed: $CUSTOM_FHIR_URL_VAL"
+            break
+        else
+            echo
+            echo "URLs do not match. Please try again."
+            confirmed_url="$custom_url_input"
+        fi
+    done
+}
+
+# === NEW: Prompt for Candle FHIR version ===
+get_candle_fhir_version() {
+    echo ""
+    echo "Select the FHIR version for the Candle server:"
+    echo "1. R4 (4.0)"
+    echo "2. R4B (4.3)"
+    echo "3. R5 (5.0)"
+    while true; do
+        read -r -p "Enter your choice (1, 2, or 3): " choice
+        case "$choice" in
+            1)
+                CANDLE_FHIR_VERSION=r4
+                break
+                ;;
+            2)
+                CANDLE_FHIR_VERSION=r4b
+                break
+                ;;
+            3)
+                CANDLE_FHIR_VERSION=r5
+                break
+                ;;
+            *)
+                echo "Invalid input. Please try again."
+                ;;
+        esac
+    done
+}
+
 
 # Call the function to get mode choice
 get_mode_choice
 
-# === Conditionally Execute HAPI Setup ===
-if [ "$APP_MODE" = "standalone" ]; then
-    echo "Running Standalone setup including HAPI FHIR..."
-    echo
+# === Conditionally Execute Server Setup ===
+case "$SERVER_TYPE" in
+    "hapi")
+        echo "Running Hapi server setup..."
+        echo
 
-    # --- Step 0: Clean up previous clone (optional) ---
-    echo "Checking for existing directory: $CLONE_DIR"
-    if [ -d "$CLONE_DIR" ]; then
-        echo "Found existing directory, removing it..."
-        rm -rf "$CLONE_DIR"
-        if [ $? -ne 0 ]; then
-            handle_error "Failed to remove existing directory: $CLONE_DIR"
+        # --- Step 0: Clean up previous clone (optional) ---
+        echo "Checking for existing directory: $CLONE_DIR_HAPI"
+        if [ -d "$CLONE_DIR_HAPI" ]; then
+            echo "Found existing directory, removing it..."
+            rm -rf "$CLONE_DIR_HAPI"
+            if [ $? -ne 0 ]; then
+                handle_error "Failed to remove existing directory: $CLONE_DIR_HAPI"
+            fi
+            echo "Existing directory removed."
+        else
+            echo "Directory does not exist, proceeding with clone."
         fi
-        echo "Existing directory removed."
-    else
-        echo "Directory does not exist, proceeding with clone."
-    fi
-    echo
+        echo
 
-    # --- Step 1: Clone the HAPI FHIR server repository ---
-    echo "Cloning repository: $REPO_URL into $CLONE_DIR..."
-    git clone "$REPO_URL" "$CLONE_DIR"
-    if [ $? -ne 0 ]; then
-        handle_error "Failed to clone repository. Check Git installation and network connection."
-    fi
-    echo "Repository cloned successfully."
-    echo
-
-    # --- Step 2: Navigate into the cloned directory ---
-    echo "Changing directory to $CLONE_DIR..."
-    cd "$CLONE_DIR" || handle_error "Failed to change directory to $CLONE_DIR."
-    echo "Current directory: $(pwd)"
-    echo
-
-    # --- Step 3: Build the HAPI server using Maven ---
-    echo "===> Starting Maven build (Step 3)..."
-    mvn clean package -DskipTests=true -Pboot
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Maven build failed."
-        cd ..
-        handle_error "Maven build process resulted in an error."
-    fi
-    echo "Maven build completed successfully."
-    echo
-
-    # --- Step 4: Copy the configuration file ---
-    echo "===> Starting file copy (Step 4)..."
-    echo "Copying configuration file..."
-    # Corrected SOURCE_CONFIG_PATH to be relative to the new current directory ($CLONE_DIR)
-    # This assumes the original script's SOURCE_CONFIG_PATH was relative to its execution location
-    # If SOURCE_CONFIG_DIR is ../hapi-fhir-setup relative to script's original location:
-    # Then from within CLONE_DIR, it becomes ../../hapi-fhir-setup
-    # We defined SOURCE_CONFIG_PATH earlier relative to the script start.
-    # So, when inside CLONE_DIR, the path from original script location should be used.
-    # The original script had: set SOURCE_CONFIG_PATH=..\%SOURCE_CONFIG_DIR%\target\classes\%CONFIG_FILE%
-    # And then: xcopy "%SOURCE_CONFIG_PATH%" "target\classes\"
-    # This implies SOURCE_CONFIG_PATH is relative to the original script's location, not the $CLONE_DIR
-    # Therefore, we need to construct the correct relative path from *within* $CLONE_DIR back to the source.
-    # Assuming the script is in dir X, and SOURCE_CONFIG_DIR is ../hapi-fhir-setup from X.
-    # So, hapi-fhir-setup is a sibling of X's parent.
-    # If CLONE_DIR is also in X, then from within CLONE_DIR, the path is ../ + original SOURCE_CONFIG_PATH
-    # For simplicity and robustness, let's use an absolute path or a more clearly defined relative path from the start.
-    # The original `SOURCE_CONFIG_PATH=..\%SOURCE_CONFIG_DIR%\target\classes\%CONFIG_FILE%` implies
-    # that `hapi-fhir-setup` is a sibling of the directory where the script *is being run from*.
-
-    # Let's assume the script is run from the root of FHIRFLARE-IG-Toolkit.
-    # And hapi-fhir-setup is also in the root, next to this script.
-    # Then SOURCE_CONFIG_PATH would be ./hapi-fhir-setup/target/classes/application.yaml
-    # And from within ./hapi-fhir-jpaserver/, the path would be ../hapi-fhir-setup/target/classes/application.yaml
-
-    # The original batch file sets SOURCE_CONFIG_PATH as "..\%SOURCE_CONFIG_DIR%\target\classes\%CONFIG_FILE%"
-    # And COPIES it to "target\classes\" *while inside CLONE_DIR*.
-    # This means the source path is relative to where the *cd %CLONE_DIR%* happened from.
-    # Let's make it relative to the script's initial execution directory.
-    INITIAL_SCRIPT_DIR=$(pwd)
-    ABSOLUTE_SOURCE_CONFIG_PATH="${INITIAL_SCRIPT_DIR}/../${SOURCE_CONFIG_DIR}/target/classes/${CONFIG_FILE}" # This matches the ..\ logic
-
-    echo "Source: $ABSOLUTE_SOURCE_CONFIG_PATH"
-    echo "Destination: target/classes/$CONFIG_FILE"
-
-    if [ ! -f "$ABSOLUTE_SOURCE_CONFIG_PATH" ]; then
-        echo "WARNING: Source configuration file not found at $ABSOLUTE_SOURCE_CONFIG_PATH."
-        echo "The script will continue, but the server might use default configuration."
-    else
-        cp "$ABSOLUTE_SOURCE_CONFIG_PATH" "target/classes/"
+        # --- Step 1: Clone the HAPI FHIR server repository ---
+        echo "Cloning repository: $REPO_URL_HAPI into $CLONE_DIR_HAPI..."
+        git clone "$REPO_URL_HAPI" "$CLONE_DIR_HAPI"
         if [ $? -ne 0 ]; then
-            echo "WARNING: Failed to copy configuration file. Check if the source file exists and permissions."
+            handle_error "Failed to clone repository. Check Git installation and network connection."
+        fi
+        echo "Repository cloned successfully."
+        echo
+
+        # --- Step 2: Navigate into the cloned directory ---
+        echo "Changing directory to $CLONE_DIR_HAPI..."
+        cd "$CLONE_DIR_HAPI" || handle_error "Failed to change directory to $CLONE_DIR_HAPI."
+        echo "Current directory: $(pwd)"
+        echo
+
+        # --- Step 3: Build the HAPI server using Maven ---
+        echo "===> Starting Maven build (Step 3)..."
+        mvn clean package -DskipTests=true -Pboot
+        if [ $? -ne 0 ]; then
+            echo "ERROR: Maven build failed."
+            cd ..
+            handle_error "Maven build process resulted in an error."
+        fi
+        echo "Maven build completed successfully."
+        echo
+
+        # --- Step 4: Copy the configuration file ---
+        echo "===> Starting file copy (Step 4)..."
+        echo "Copying configuration file..."
+        INITIAL_SCRIPT_DIR=$(pwd)
+        ABSOLUTE_SOURCE_CONFIG_PATH="${INITIAL_SCRIPT_DIR}/../${SOURCE_CONFIG_DIR}/target/classes/${CONFIG_FILE}"
+
+        echo "Source: $ABSOLUTE_SOURCE_CONFIG_PATH"
+        echo "Destination: target/classes/$CONFIG_FILE"
+
+        if [ ! -f "$ABSOLUTE_SOURCE_CONFIG_PATH" ]; then
+            echo "WARNING: Source configuration file not found at $ABSOLUTE_SOURCE_CONFIG_PATH."
             echo "The script will continue, but the server might use default configuration."
         else
-            echo "Configuration file copied successfully."
+            cp "$ABSOLUTE_SOURCE_CONFIG_PATH" "target/classes/"
+            if [ $? -ne 0 ]; then
+                echo "WARNING: Failed to copy configuration file. Check if the source file exists and permissions."
+                echo "The script will continue, but the server might use default configuration."
+            else
+                echo "Configuration file copied successfully."
+            fi
         fi
-    fi
-    echo
+        echo
 
-    # --- Step 5: Navigate back to the parent directory ---
-    echo "===> Changing directory back (Step 5)..."
-    cd .. || handle_error "Failed to change back to the parent directory."
-    echo "Current directory: $(pwd)"
-    echo
+        # --- Step 5: Navigate back to the parent directory ---
+        echo "===> Changing directory back (Step 5)..."
+        cd .. || handle_error "Failed to change back to the parent directory."
+        echo "Current directory: $(pwd)"
+        echo
+        ;;
 
-else # APP_MODE is "lite"
-    echo "Running Lite setup, skipping HAPI FHIR build..."
-    # Ensure the hapi-fhir-jpaserver directory doesn't exist or is empty if Lite mode is chosen
-    if [ -d "$CLONE_DIR" ]; then
-        echo "Found existing HAPI directory ($CLONE_DIR) in Lite mode. Removing it..."
-        rm -rf "$CLONE_DIR"
-    fi
-    # Create empty target directories expected by Dockerfile COPY, even if not used
-    mkdir -p "${CLONE_DIR}/target/classes"
-    mkdir -p "${CLONE_DIR}/custom" # This was in the original batch, ensure it's here
-    # Create a placeholder empty WAR file and application.yaml to satisfy Dockerfile COPY
-    touch "${CLONE_DIR}/target/ROOT.war"
-    touch "${CLONE_DIR}/target/classes/application.yaml"
-    echo "Placeholder files and directories created for Lite mode build in $CLONE_DIR."
-    echo
-fi
+    "candle")
+        echo "Running FHIR Candle server setup..."
+        echo
+        
+        # --- Step 0: Clean up previous clone (optional) ---
+        echo "Checking for existing directory: $CLONE_DIR_CANDLE"
+        if [ -d "$CLONE_DIR_CANDLE" ]; then
+            echo "Found existing directory, removing it..."
+            rm -rf "$CLONE_DIR_CANDLE"
+            if [ $? -ne 0 ]; then
+                handle_error "Failed to remove existing directory: $CLONE_DIR_CANDLE"
+            fi
+            echo "Existing directory removed."
+        else
+            echo "Directory does not exist, proceeding with clone."
+        fi
+        echo
 
-# === Modify docker-compose.yml to set APP_MODE ===
-echo "Updating docker-compose.yml with APP_MODE=$APP_MODE..."
+        # --- Step 1: Clone the FHIR Candle server repository ---
+        echo "Cloning repository: $REPO_URL_CANDLE into $CLONE_DIR_CANDLE..."
+        git clone "$REPO_URL_CANDLE" "$CLONE_DIR_CANDLE"
+        if [ $? -ne 0 ]; then
+            handle_error "Failed to clone repository. Check Git and Dotnet SDK installation and network connection."
+        fi
+        echo "Repository cloned successfully."
+        echo
+        
+        # --- Step 2: Navigate into the cloned directory ---
+        echo "Changing directory to $CLONE_DIR_CANDLE..."
+        cd "$CLONE_DIR_CANDLE" || handle_error "Failed to change directory to $CLONE_DIR_CANDLE."
+        echo "Current directory: $(pwd)"
+        echo
+
+        # --- Step 3: Build the FHIR Candle server using Dotnet ---
+        echo "===> Starting Dotnet build (Step 3)..."
+        dotnet publish -c Release -f net9.0 -o publish
+        if [ $? -ne 0 ]; then
+            handle_error "Dotnet build failed. Check Dotnet SDK installation."
+        fi
+        echo "Dotnet build completed successfully."
+        echo
+        
+        # --- Step 4: Navigate back to the parent directory ---
+        echo "===> Changing directory back (Step 4)..."
+        cd .. || handle_error "Failed to change back to the parent directory."
+        echo "Current directory: $(pwd)"
+        echo
+        ;;
+
+    *) # APP_MODE is Lite, no SERVER_TYPE
+        echo "Running Lite setup, skipping server build..."
+        if [ -d "$CLONE_DIR_HAPI" ]; then
+            echo "Found existing HAPI directory in Lite mode. Removing it to avoid build issues..."
+            rm -rf "$CLONE_DIR_HAPI"
+        fi
+        if [ -d "$CLONE_DIR_CANDLE" ]; then
+            echo "Found existing Candle directory in Lite mode. Removing it to avoid build issues..."
+            rm -rf "$CLONE_DIR_CANDLE"
+        fi
+        mkdir -p "${CLONE_DIR_HAPI}/target/classes"
+        mkdir -p "${CLONE_DIR_HAPI}/custom"
+        touch "${CLONE_DIR_HAPI}/target/ROOT.war"
+        touch "${CLONE_DIR_HAPI}/target/classes/application.yaml"
+        mkdir -p "${CLONE_DIR_CANDLE}/publish"
+        touch "${CLONE_DIR_CANDLE}/publish/fhir-candle.dll"
+        echo "Placeholder files and directories created for Lite mode build."
+        echo
+        ;;
+esac
+
+# === MODIFIED: Update docker-compose.yml to set APP_MODE and HAPI_FHIR_URL and DOCKERFILE ===
+echo "Updating docker-compose.yml with APP_MODE=$APP_MODE and HAPI_FHIR_URL..."
 DOCKER_COMPOSE_TMP="docker-compose.yml.tmp"
 DOCKER_COMPOSE_ORIG="docker-compose.yml"
+
+HAPI_URL_TO_USE="https://fhir.hl7.org.au/aucore/fhir/DEFAULT/"
+if [ -n "$CUSTOM_FHIR_URL_VAL" ]; then
+    HAPI_URL_TO_USE="$CUSTOM_FHIR_URL_VAL"
+elif [ "$SERVER_TYPE" = "candle" ]; then
+    HAPI_URL_TO_USE="http://localhost:5826/fhir/${CANDLE_FHIR_VERSION}"
+else
+    HAPI_URL_TO_USE="http://localhost:8080/fhir"
+fi
+
+DOCKERFILE_TO_USE="Dockerfile.lite"
+if [ "$SERVER_TYPE" = "hapi" ]; then
+    DOCKERFILE_TO_USE="Dockerfile.hapi"
+elif [ "$SERVER_TYPE" = "candle" ]; then
+    DOCKERFILE_TO_USE="Dockerfile.candle"
+fi
 
 cat << EOF > "$DOCKER_COMPOSE_TMP"
 version: '3.8'
@@ -181,22 +307,58 @@ services:
   fhirflare:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ${DOCKERFILE_TO_USE}
     ports:
+EOF
+
+if [ "$SERVER_TYPE" = "candle" ]; then
+    cat << EOF >> "$DOCKER_COMPOSE_TMP"
       - "5000:5000"
-      - "8080:8080" # Keep port exposed, even if Tomcat isn't running useful stuff in Lite
+      - "5001:5826"
+EOF
+else
+    cat << EOF >> "$DOCKER_COMPOSE_TMP"
+      - "5000:5000"
+      - "8080:8080"
+EOF
+fi
+
+cat << EOF >> "$DOCKER_COMPOSE_TMP"
     volumes:
       - ./instance:/app/instance
       - ./static/uploads:/app/static/uploads
-      - ./instance/hapi-h2-data/:/app/h2-data # Keep volume mounts consistent
       - ./logs:/app/logs
+EOF
+
+if [ "$SERVER_TYPE" = "hapi" ]; then
+    cat << EOF >> "$DOCKER_COMPOSE_TMP"
+      - ./instance/hapi-h2-data/:/app/h2-data # Keep volume mounts consistent
+      - ./hapi-fhir-jpaserver/target/ROOT.war:/usr/local/tomcat/webapps/ROOT.war
+      - ./hapi-fhir-jpaserver/target/classes/application.yaml:/usr/local/tomcat/conf/application.yaml
+EOF
+elif [ "$SERVER_TYPE" = "candle" ]; then
+    cat << EOF >> "$DOCKER_COMPOSE_TMP"
+      - ./fhir-candle/publish/:/app/fhir-candle-publish/
+EOF
+fi
+
+cat << EOF >> "$DOCKER_COMPOSE_TMP"
     environment:
       - FLASK_APP=app.py
       - FLASK_ENV=development
       - NODE_PATH=/usr/lib/node_modules
       - APP_MODE=${APP_MODE}
       - APP_BASE_URL=http://localhost:5000
-      - HAPI_FHIR_URL=http://localhost:8080/fhir
+      - HAPI_FHIR_URL=${HAPI_URL_TO_USE}
+EOF
+
+if [ "$SERVER_TYPE" = "candle" ]; then
+    cat << EOF >> "$DOCKER_COMPOSE_TMP"
+      - ASPNETCORE_URLS=http://0.0.0.0:5826
+EOF
+fi
+
+cat << EOF >> "$DOCKER_COMPOSE_TMP"
     command: supervisord -c /etc/supervisord.conf
 EOF
 

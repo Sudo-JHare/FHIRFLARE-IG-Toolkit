@@ -1,16 +1,12 @@
-# Base image with Python and Java
+# Base image with Python, Java, and Maven
 FROM tomcat:10.1-jdk17
 
 # Install build dependencies, Node.js 18, and coreutils (for stdbuf)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-venv curl coreutils git \
+    python3 python3-pip python3-venv curl coreutils git maven \
     && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
-
-# ADDED: Install the Dotnet SDK for the FHIR Candle server
-# This makes the image a universal base for either server type
-RUN apt-get update && apt-get install -y dotnet-sdk-6.0
 
 # Install specific versions of GoFSH and SUSHI
 RUN npm install -g gofsh fsh-sushi
@@ -57,9 +53,6 @@ COPY hapi-fhir-jpaserver/target/classes/application.yaml /app/config/application
 COPY hapi-fhir-jpaserver/target/classes/application.yaml /usr/local/tomcat/webapps/app/config/application.yaml
 COPY hapi-fhir-jpaserver/custom/ /usr/local/tomcat/webapps/custom/
 
-# ADDED: Copy pre-built Candle DLL files
-COPY fhir-candle/publish/ /app/fhir-candle-publish/
-
 # Install supervisord
 RUN pip install supervisor
 
@@ -67,7 +60,7 @@ RUN pip install supervisor
 COPY supervisord.conf /etc/supervisord.conf
 
 # Expose ports
-EXPOSE 5000 8080 5001
+EXPOSE 5000 8080
 
 # Start supervisord
 CMD ["supervisord", "-c", "/etc/supervisord.conf"]
