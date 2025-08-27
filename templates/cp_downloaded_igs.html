@@ -40,7 +40,7 @@
 
     <div class="row g-4">
         <!-- LEFT: Downloaded Packages -->
-        <div class="col-md-6">
+        <div class="col-md-5">
             <div class="card h-100">
                 <div class="card-header"><i class="bi bi-folder-symlink me-1"></i> Downloaded Packages ({{ packages|length }})</div>
                 <div class="card-body">
@@ -65,20 +65,20 @@
                                             </td>
                                             <td>{{ pkg.version }}</td>
                                             <td>
-                                                <div class="btn-group btn-group-sm">
+                                                <div class="btn-group-vertical btn-group-sm w-80">
                                                     {% if is_processed %}
                                                         <span class="btn btn-success disabled"><i class="bi bi-check-lg"></i> Processed</span>
                                                     {% else %}
                                                         <form method="POST" action="{{ url_for('process_ig') }}" style="display:inline;">
                                                             {{ form.csrf_token }}
                                                             <input type="hidden" name="filename" value="{{ pkg.filename }}">
-                                                            <button type="submit" class="btn btn-outline-primary"><i class="bi bi-gear"></i> Process</button>
+                                                            <button type="submit" class="btn btn-outline-primary w-80"><i class="bi bi-gear"></i> Process</button>
                                                         </form>
                                                     {% endif %}
                                                     <form method="POST" action="{{ url_for('delete_ig') }}" style="display:inline;">
                                                         {{ form.csrf_token }}
                                                         <input type="hidden" name="filename" value="{{ pkg.filename }}">
-                                                        <button type="submit" class="btn btn-outline-danger" onclick="return confirm('Are you sure you want to delete {{ pkg.name }}#{{ pkg.version }}?');"><i class="bi bi-trash"></i> Delete</button>
+                                                        <button type="submit" class="btn btn-outline-danger w-80" onclick="return confirm('Are you sure you want to delete {{ pkg.name }}#{{ pkg.version }}?');"><i class="bi bi-trash"></i> Delete</button>
                                                     </form>
                                                 </div>
                                             </td>
@@ -105,7 +105,7 @@
         </div>
 
         <!-- RIGHT: Processed Packages -->
-        <div class="col-md-6">
+        <div class="col-md-7">
             <div class="card h-100">
                 <div class="card-header"><i class="bi bi-check-circle me-1"></i> Processed Packages ({{ processed_list|length }})</div>
                 <div class="card-body">
@@ -139,12 +139,12 @@
                                                 {% endif %}
                                             </td>
                                             <td>
-                                                <div class="btn-group-vertical btn-group-sm w-100">
-                                                    <a href="{{ url_for('view_ig', processed_ig_id=processed_ig.id) }}" class="btn btn-outline-info w-100" title="View Details"><i class="bi bi-search"></i> View</a>
+                                                <div class="btn-group-vertical btn-group-sm w-80">
+                                                    <a href="{{ url_for('view_ig', processed_ig_id=processed_ig.id) }}" class="btn btn-outline-info w-80" title="View Details"><i class="bi bi-search"></i> View</a>
                                                     <form method="POST" action="{{ url_for('unload_ig') }}" style="display:inline;">
                                                         {{ form.csrf_token }}
                                                         <input type="hidden" name="ig_id" value="{{ processed_ig.id }}">
-                                                        <button type="submit" class="btn btn-outline-warning w-100 mt-1" onclick="return confirm('Are you sure you want to unload {{ processed_ig.package_name }}#{{ processed_ig.version }}?');"><i class="bi bi-x-lg"></i> Unload</button>
+                                                        <button type="submit" class="btn btn-outline-warning w-80 mt-1" onclick="return confirm('Are you sure you want to unload {{ processed_ig.package_name }}#{{ processed_ig.version }}?');"><i class="bi bi-x-lg"></i> Unload</button>
                                                     </form>
                                                 </div>
                                             </td>
