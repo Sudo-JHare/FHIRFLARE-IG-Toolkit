@@ -10,7 +10,6 @@
         </p>
     </div>
 </div>
-
 <div class="container mt-4">
     <div class="card shadow-sm mb-4">
         <div class="card-header">
@@ -28,7 +27,7 @@
                 </div>
             {% endif %}
             <form id="retrieveForm" method="POST">
-                {{ form.hidden_tag() }}
+                {{ form.csrf_token(id='retrieve_csrf_token') }}
                 <div class="mb-3">
                     <label class="form-label fw-bold">FHIR Server</label>
                     <div class="input-group">
@@ -39,7 +38,6 @@
                     </div>
                     <small id="fhirServerHelp" class="form-text text-muted">Toggle to use local Fhir Server(/fhir proxy) or enter a custom FHIR server URL.</small>
                 </div>
-
                 {# Authentication Section (Shown for Custom URL) #}
                 <div class="mb-3" id="authSection" style="display: none;">
                     <label class="form-label fw-bold">Authentication</label>
@@ -68,7 +66,6 @@
                     </div>
                     <small class="form-text text-muted">Select authentication method for the custom FHIR server.</small>
                 </div>
-
                 {# Checkbox Row #}
                 <div class="row g-3 mb-3 align-items-center">
                     <div class="col-md-6">
@@ -78,7 +75,6 @@
                         {{ render_field(form.fetch_reference_bundles, id='fetch_reference_bundles_checkbox') }}
                     </div>
                 </div>
-
                 <button type="button" class="btn btn-primary mb-3" id="fetchMetadata">Fetch Metadata</button>
                 <div class="banner3 mt-3" id="resourceTypes" style="display: none;">
                     <h5>Resource Types</h5>
@@ -102,14 +98,13 @@
             </div>
         </div>
     </div>
-
     <div class="card shadow-sm">
         <div class="card-header">
             <h4 class="my-0 fw-normal"><i class="bi bi-scissors me-2"></i>Split Bundles</h4>
         </div>
         <div class="card-body">
             <form id="splitForm" method="POST" enctype="multipart/form-data">
-                {{ form.hidden_tag() }}
+                {{ form.csrf_token(id='split_csrf_token') }}
                 <div class="mb-3">
                     <label class="form-label fw-bold">Bundle Source</label>
                     <div class="form-check">
@@ -141,7 +136,6 @@
         </div>
     </div>
 </div>
-
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     // --- DOM Element References ---
@@ -172,7 +166,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const basicAuthInputs = document.getElementById('basicAuthInputs');
     const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
-
     // --- State & Config Variables ---
     const appMode = '{{ app_mode | default("standalone") | lower }}';
     const apiKey = '{{ api_key }}';
@@ -181,11 +174,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let retrieveZipPath = null;
     let splitZipPath = null;
     let fetchedMetadataCache = null;
-    let localHapiBaseUrl = ''; // NEW: To store the fetched URL
-
+    let localHapiBaseUrl = ''; // To store the fetched URL
     // --- Helper Functions ---
     const sanitizeText = (str) => str ? String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
-
     // --- UI Update Functions ---
     function updateBundleSourceUI() {
         const selectedSource = Array.from(bundleSourceRadios).find(radio => radio.checked)?.value;
@@ -196,13 +187,12 @@ document.addEventListener('DOMContentLoaded', () => {
             splitBundleZipInput.required = selectedSource === 'upload';
         }
     }
-
     async function fetchLocalUrlAndSetUI() {
         try {
             const response = await fetch('/api/get-local-server-url');
             if (!response.ok) throw new Error('Failed to fetch local server URL.');
             const data = await response.json();
-            localHapiBaseUrl = data.url;
+            localHapiBaseUrl = data.url.replace(/\/+$/, ''); // Normalize by removing trailing slashes
             console.log(`Local HAPI URL fetched: ${localHapiBaseUrl}`);
         } catch (error) {
             console.error(error);
@@ -212,10 +202,8 @@ document.addEventListener('DOMContentLoaded', () => {
             updateServerToggleUI();
         }
     }
-    
     function updateServerToggleUI() {
         if (!toggleLabel || !fhirServerUrlInput || !toggleServerButton || !authSection) return;
-
         if (appMode === 'lite') {
             useLocalHapi = false;
             toggleServerButton.disabled = true;
@@ -243,7 +231,6 @@ document.addEventListener('DOMContentLoaded', () => {
         updateAuthInputsUI();
         console.log(`Server toggle UI updated: useLocalHapi=${useLocalHapi}, customUrl=${fhirServerUrlInput.value}`);
     }
-
     function updateAuthInputsUI() {
         if (!authTypeSelect || !authInputsGroup || !bearerTokenInput || !basicAuthInputs) return;
         const authType = authTypeSelect.value;
@@ -254,7 +241,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (authType !== 'basic' && usernameInput) usernameInput.value = '';
         if (authType !== 'basic' && passwordInput) passwordInput.value = '';
     }
-
     function toggleFetchReferenceBundles() {
         if (validateReferencesCheckbox && fetchReferenceBundlesGroup) {
             fetchReferenceBundlesGroup.style.display = validateReferencesCheckbox.checked ? 'block' : 'none';
@@ -265,12 +251,10 @@ document.addEventListener('DOMContentLoaded', () => {
             console.warn("Could not find checkbox elements needed for toggling.");
         }
     }
-
     // --- Event Listeners ---
     bundleSourceRadios.forEach(radio => {
         radio.addEventListener('change', updateBundleSourceUI);
     });
-
     toggleServerButton.addEventListener('click', () => {
         if (appMode === 'lite') return;
         useLocalHapi = !useLocalHapi;
@@ -280,24 +264,20 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchedMetadataCache = null;
         console.log(`Server toggled: useLocalHapi=${useLocalHapi}`);
     });
-
     if (authTypeSelect) {
         authTypeSelect.addEventListener('change', updateAuthInputsUI);
     }
-
     if (validateReferencesCheckbox) {
         validateReferencesCheckbox.addEventListener('change', toggleFetchReferenceBundles);
     } else {
         console.warn("Validate references checkbox not found.");
     }
-
     fetchMetadataButton.addEventListener('click', async () => {
         resourceButtonsContainer.innerHTML = '<span class="text-muted">Fetching...</span>';
         resourceTypesDiv.style.display = 'block';
-        
         let customUrl = null;
         if (!useLocalHapi) {
-            customUrl = fhirServerUrlInput.value.trim().replace(/\/+$/, '');
+            customUrl = fhirServerUrlInput.value.trim().replace(/\/+$/, ''); // Normalize custom URL
             if (!customUrl) {
                 fhirServerUrlInput.classList.add('is-invalid');
                 alert('Please enter a valid FHIR server URL.');
@@ -312,20 +292,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         fhirServerUrlInput.classList.remove('is-invalid');
-
         fetchMetadataButton.disabled = true;
         fetchMetadataButton.textContent = 'Fetching...';
-
         try {
-            // REVISED LOGIC: Build URL and headers based on the toggle state
+            // Build URL and headers based on the toggle state
             let fetchUrl;
             const headers = { 'Accept': 'application/fhir+json' };
-
             if (useLocalHapi) {
                 if (!localHapiBaseUrl) {
                     throw new Error("Local HAPI URL not available. Please refresh.");
                 }
-                fetchUrl = `${localHapiBaseUrl}/metadata`;
+                fetchUrl = `${localHapiBaseUrl}/metadata`; // localHapiBaseUrl is already normalized
                 console.log(`Fetching metadata directly from local URL: ${fetchUrl}`);
             } else {
                 fetchUrl = `${customUrl}/metadata`;
@@ -339,11 +316,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 console.log(`Fetching metadata directly from custom URL: ${fetchUrl}`);
             }
-
             console.log(`Request Headers sent: ${JSON.stringify(headers)}`);
-
             const response = await fetch(fetchUrl, { method: 'GET', headers: headers });
-
             if (!response.ok) {
                 let errorText = `Request failed with status ${response.status} ${response.statusText}`;
                 try { const errorBody = await response.text(); errorText += ` - Body: ${errorBody.substring(0, 200)}...`; } catch (e) {}
@@ -353,7 +327,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             console.log("Metadata received:", JSON.stringify(data, null, 2).substring(0, 500));
             fetchedMetadataCache = data;
-
             const resourceTypes = data.rest?.[0]?.resource?.map(r => r.type)?.filter(Boolean) || [];
             resourceButtonsContainer.innerHTML = '';
             if (!resourceTypes.length) {
@@ -384,7 +357,6 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchMetadataButton.textContent = 'Fetch Metadata';
         }
     });
-
     retrieveForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const spinner = retrieveButton.querySelector('.spinner-border');
@@ -395,7 +367,6 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadRetrieveButton.style.display = 'none';
         retrieveZipPath = null;
         retrieveConsole.innerHTML = `<div>${new Date().toLocaleTimeString()} [INFO] Starting bundle retrieval...</div>`;
-
         const selectedResources = Array.from(resourceButtonsContainer.querySelectorAll('.btn.active')).map(btn => btn.dataset.resource);
         if (!selectedResources.length) {
             alert('Please select at least one resource type.');
@@ -404,8 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (icon) icon.style.display = 'inline-block';
             return;
         }
-
-        const currentFhirServerUrl = useLocalHapi ? localHapiBaseUrl : fhirServerUrlInput.value.trim();
+        const currentFhirServerUrl = useLocalHapi ? localHapiBaseUrl : fhirServerUrlInput.value.trim().replace(/\/+$/, '');
         if (!currentFhirServerUrl) {
             alert('FHIR Server URL is required.');
             fhirServerUrlInput.classList.add('is-invalid');
@@ -414,14 +384,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (icon) icon.style.display = 'inline-block';
             return;
         }
-
         const formData = new FormData();
         const csrfTokenInput = retrieveForm.querySelector('input[name="csrf_token"]');
         if (csrfTokenInput) formData.append('csrf_token', csrfTokenInput.value);
         selectedResources.forEach(res => formData.append('resources', res));
-
         formData.append('fhir_server_url', currentFhirServerUrl);
-
         if (validateReferencesCheckbox) {
             formData.append('validate_references', validateReferencesCheckbox.checked ? 'true' : 'false');
         }
@@ -434,7 +401,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             formData.append('fetch_reference_bundles', 'false');
         }
-
         if (!useLocalHapi && authTypeSelect) {
             const authType = authTypeSelect.value;
             formData.append('auth_type', authType);
@@ -459,24 +425,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 formData.append('password', passwordInput.value);
             }
         }
-
         const headers = {
             'Accept': 'application/x-ndjson',
             'X-CSRFToken': csrfTokenInput ? csrfTokenInput.value : '',
             'X-API-Key': apiKey
         };
         console.log(`Submitting retrieve request. Server: ${currentFhirServerUrl}, ValidateRefs: ${formData.get('validate_references')}, FetchRefBundles: ${formData.get('fetch_reference_bundles')}, AuthType: ${formData.get('auth_type')}`);
-
         try {
             const response = await fetch('/api/retrieve-bundles', { method: 'POST', headers: headers, body: formData });
-
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response.' }));
                 throw new Error(`HTTP ${response.status}: ${errorData.message || 'Unknown error during retrieval'}`);
             }
             retrieveZipPath = response.headers.get('X-Zip-Path');
             console.log(`Received X-Zip-Path: ${retrieveZipPath}`);
-
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
@@ -498,13 +460,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         else if (data.type === 'success') { prefix = '[SUCCESS]'; messageClass = 'text-success'; }
                         else if (data.type === 'progress') { prefix = '[PROGRESS]'; messageClass = 'text-light'; }
                         else if (data.type === 'complete') { prefix = '[COMPLETE]'; messageClass = 'text-primary'; }
-
                         const messageDiv = document.createElement('div');
                         messageDiv.className = messageClass;
                         messageDiv.innerHTML = `${timestamp} ${prefix} ${sanitizeText(data.message)}`;
                         retrieveConsole.appendChild(messageDiv);
                         retrieveConsole.scrollTop = retrieveConsole.scrollHeight;
-
                         if (data.type === 'complete' && retrieveZipPath) {
                             const completeData = data.data || {};
                             const bundlesFound = (completeData.total_initial_bundles > 0) || (completeData.fetched_individual_references > 0) || (completeData.fetched_type_bundles > 0);
@@ -522,7 +482,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             if (buffer.trim()) { /* Handle final buffer */ }
-
         } catch (e) {
             console.error('Retrieval error:', e);
             const ts = new Date().toLocaleTimeString();
@@ -534,20 +493,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (icon) icon.style.display = 'inline-block';
         }
     });
-
     downloadRetrieveButton.addEventListener('click', () => {
         if (retrieveZipPath) {
             const filename = retrieveZipPath.split('/').pop() || 'retrieved_bundles.zip';
             const downloadUrl = `/tmp/${filename}`;
             console.log(`Attempting to download ZIP from Flask endpoint: ${downloadUrl}`);
-
             const link = document.createElement('a');
             link.href = downloadUrl;
             link.download = 'retrieved_bundles.zip';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-
             setTimeout(() => {
                 const csrfToken = retrieveForm.querySelector('input[name="csrf_token"]')?.value || '';
                 fetch('/clear-session', { method: 'POST', headers: { 'X-CSRFToken': csrfToken }})
@@ -565,7 +521,6 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Download error: No file path available.");
         }
     });
-
     splitForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const spinner = splitButton.querySelector('.spinner-border');
@@ -576,13 +531,10 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadSplitButton.style.display = 'none';
         splitZipPath = null;
         splitConsole.innerHTML = `<div>${new Date().toLocaleTimeString()} [INFO] Starting bundle splitting...</div>`;
-
         const formData = new FormData();
         const csrfTokenInput = splitForm.querySelector('input[name="csrf_token"]');
         if (csrfTokenInput) formData.append('csrf_token', csrfTokenInput.value);
-
         const bundleSource = Array.from(bundleSourceRadios).find(radio => radio.checked)?.value;
-
         if (bundleSource === 'upload') {
             if (!splitBundleZipInput || splitBundleZipInput.files.length === 0) {
                 alert('Please select a ZIP file to upload for splitting.');
@@ -614,16 +566,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (icon) icon.style.display = 'inline-block';
             return;
         }
-
         const headers = {
             'Accept': 'application/x-ndjson',
             'X-CSRFToken': csrfTokenInput ? csrfTokenInput.value : '',
             'X-API-Key': apiKey
         };
-
         try {
             const response = await fetch('/api/split-bundles', { method: 'POST', headers: headers, body: formData });
-
             if (!response.ok) {
                 const errorMsg = await response.text();
                 let detail = errorMsg;
@@ -632,7 +581,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             splitZipPath = response.headers.get('X-Zip-Path');
             console.log(`Received X-Zip-Path for split: ${splitZipPath}`);
-
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
@@ -665,7 +613,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             if (buffer.trim()) { /* Handle final buffer */ }
-
         } catch (e) {
             console.error('Splitting error:', e);
             const ts = new Date().toLocaleTimeString();
@@ -677,7 +624,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (icon) icon.style.display = 'inline-block';
         }
     });
-
     downloadSplitButton.addEventListener('click', () => {
         if (splitZipPath) {
             const filename = splitZipPath.split('/').pop() || 'split_resources.zip';
@@ -702,7 +648,6 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Download error: No file path available.");
         }
     });
-
     // --- Initial Setup Calls ---
     updateBundleSourceUI();
     fetchLocalUrlAndSetUI();

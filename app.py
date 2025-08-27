@@ -3185,14 +3185,23 @@ def ig_configurator():
 @app.route('/download/<path:filename>')
 def download_file(filename):
     """
-    Serves a file from the temporary directory.
-    This route is necessary to allow the user to download the validator reports.
+    Serves a file from the temporary directory created during validation.
+    The filename includes the unique temporary directory name to prevent
+    unauthorized file access and to correctly locate the file.
     """
-    # The temporary directory path is hardcoded for security
-    temp_dir = tempfile.gettempdir()
+    # Use the stored temporary directory path from app.config
+    temp_dir = current_app.config.get('VALIDATION_TEMP_DIR')
+    
+    # If no temporary directory is set, or it's a security risk, return a 404.
+    if not temp_dir or not os.path.exists(temp_dir):
+        logger.error(f"Download request failed: Temporary directory not found or expired. Path: {temp_dir}")
+        return jsonify({"error": "File not found or validation session expired."}), 404
+        
+    # Construct the full file path.
     file_path = os.path.join(temp_dir, filename)
 
     if not os.path.exists(file_path):
+        logger.error(f"File not found for download: {file_path}")
         return jsonify({"error": "File not found."}), 404
         
     try:

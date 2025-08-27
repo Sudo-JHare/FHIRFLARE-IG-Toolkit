@@ -275,6 +275,7 @@
             clearResultsButton.classList.remove('d-none');
 
             if (data.file_paths) {
+                // Fix: Extract just the filename to construct the download URL
                 const jsonFileName = data.file_paths.json.split('/').pop();
                 const htmlFileName = data.file_paths.html.split('/').pop();
                 const downloadDiv = document.createElement('div');
