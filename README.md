@@ -5,21 +5,64 @@
 
 The FHIRFLARE IG Toolkit is a Flask-based web application designed to streamline the management, processing, validation, and deployment of FHIR Implementation Guides (IGs) and test data. It offers a user-friendly interface for importing IG packages, extracting metadata, validating FHIR resources or bundles, pushing IGs to FHIR servers, converting FHIR resources to FHIR Shorthand (FSH), uploading complex test data sets with dependency management, and retrieving/splitting FHIR bundles. The toolkit includes live consoles for real-time feedback, making it an essential tool for FHIR developers and implementers.
 
-The application can run in two modes:
+The application can run in four modes:
 
-* **Standalone:** Includes a Dockerized Flask frontend, SQLite database, and an embedded HAPI FHIR server for local validation and interaction.
-* **Lite:** Includes only the Dockerized Flask frontend and SQLite database, excluding the local HAPI FHIR server. Requires connection to external FHIR servers for certain features.
+
+* Installation Modes (Lite, Custom URL, Hapi, and Candle)
+    This toolkit now offers four primary installation modes, configured via a simple command-line prompt during setup:
+
+    Lite Mode
+
+    Includes the Flask frontend, SQLite database, and core tooling (GoFSH, SUSHI) without an embedded FHIR server.
+
+    Requires you to provide a URL for an external FHIR server when using features like the FHIR API Explorer and validation.
+
+    Does not require Git, Maven, or .NET for setup.
+
+    Ideal for users who will always connect to an existing external FHIR server.
+
+    Custom URL Mode
+
+    Similar to Lite Mode, but prompts you for a specific external FHIR server URL to use as the default for the toolkit.
+
+    The application will be pre-configured to use your custom URL for all FHIR-related operations.
+
+    Does not require Git, Maven, or .NET for setup.
+
+    Hapi Mode
+
+    Includes the full FHIRFLARE toolkit and an embedded HAPI FHIR server.
+
+    The docker-compose configuration will proxy requests to the internal HAPI server, which is accessible via http://localhost:8080/fhir.
+
+    Requires Git and Maven during the initial build process to compile the HAPI FHIR server.
+
+    Ideal for users who want a self-contained, offline development and testing environment.
+
+    Candle Mode
+
+    Includes the full FHIRFLARE toolkit and an embedded FHIR Candle server.
+
+    The docker-compose configuration will proxy requests to the internal Candle server, which is accessible via http://localhost:5001/fhir/<version>.
+
+    Requires Git and the .NET SDK during the initial build process.
+
+    Ideal for users who want to use the .NET-based FHIR server for development and testing.
 
 ## Installation Modes (Lite vs. Standalone)
 
 This toolkit offers two primary installation modes to suit different needs:
 
-* **Standalone Version:**
+* **Standalone Version - Hapi / Candle:**
     * Includes the full FHIRFLARE Toolkit application **and** an embedded HAPI FHIR server running locally within the Docker environment.
     * Allows for local FHIR resource validation using HAPI FHIR's capabilities.
     * Enables the "Use Local HAPI" option in the FHIR API Explorer and FHIR UI Operations pages, proxying requests to the internal HAPI server (`http://localhost:8080/fhir`).
     * Requires Git and Maven during the initial build process (via the `.bat` script or manual steps) to prepare the HAPI FHIR server.
     * Ideal for users who want a self-contained environment for development and testing or who don't have readily available external FHIR servers.
+
+* **Standalone Version - Custom Mode:**
+    * Includes the full FHIRFLARE Toolkit application **and** point the Environmet variable at your chosen custom fhir url endpoint allowing for Custom setups
+    
 
 * **Lite Version:**
     * Includes the FHIRFLARE Toolkit application **without** the embedded HAPI FHIR server.
