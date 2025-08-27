@@ -181,6 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let retrieveZipPath = null;
     let splitZipPath = null;
     let fetchedMetadataCache = null;
+    let localHapiBaseUrl = ''; // NEW: To store the fetched URL
 
     // --- Helper Functions ---
     const sanitizeText = (str) => str ? String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
@@ -196,6 +197,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function fetchLocalUrlAndSetUI() {
+        try {
+            const response = await fetch('/api/get-local-server-url');
+            if (!response.ok) throw new Error('Failed to fetch local server URL.');
+            const data = await response.json();
+            localHapiBaseUrl = data.url;
+            console.log(`Local HAPI URL fetched: ${localHapiBaseUrl}`);
+        } catch (error) {
+            console.error(error);
+            localHapiBaseUrl = '/fhir'; // Fallback to proxy
+            alert('Could not fetch local HAPI server URL. Falling back to proxy.');
+        } finally {
+            updateServerToggleUI();
+        }
+    }
+    
     function updateServerToggleUI() {
         if (!toggleLabel || !fhirServerUrlInput || !toggleServerButton || !authSection) return;
 
@@ -277,15 +294,16 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchMetadataButton.addEventListener('click', async () => {
         resourceButtonsContainer.innerHTML = '<span class="text-muted">Fetching...</span>';
         resourceTypesDiv.style.display = 'block';
-        const customUrl = useLocalHapi ? null : fhirServerUrlInput.value.trim().replace(/\/+$/, '');
-
-        if (!useLocalHapi && !customUrl) {
-            fhirServerUrlInput.classList.add('is-invalid');
-            alert('Please enter a valid FHIR server URL.');
-            resourceButtonsContainer.innerHTML = '<span class="text-danger">Error: Custom URL required.</span>';
-            return;
-        }
+        
+        let customUrl = null;
         if (!useLocalHapi) {
+            customUrl = fhirServerUrlInput.value.trim().replace(/\/+$/, '');
+            if (!customUrl) {
+                fhirServerUrlInput.classList.add('is-invalid');
+                alert('Please enter a valid FHIR server URL.');
+                resourceButtonsContainer.innerHTML = '<span class="text-danger">Error: Custom URL required.</span>';
+                return;
+            }
             try { new URL(customUrl); } catch (_) {
                 fhirServerUrlInput.classList.add('is-invalid');
                 alert('Invalid custom URL format.');
@@ -299,23 +317,29 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchMetadataButton.textContent = 'Fetching...';
 
         try {
-            const fetchUrl = useLocalHapi ? '/fhir/metadata' : `${customUrl}/metadata`;
+            // REVISED LOGIC: Build URL and headers based on the toggle state
+            let fetchUrl;
             const headers = { 'Accept': 'application/fhir+json' };
-            if (!useLocalHapi && customUrl) {
-                if (authTypeSelect && authTypeSelect.value !== 'none') {
-                    const authType = authTypeSelect.value;
-                    if (authType === 'bearer' && bearerTokenInput && bearerTokenInput.value) {
-                        headers['Authorization'] = `Bearer ${bearerTokenInput.value}`;
-                    } else if (authType === 'basic' && usernameInput && passwordInput && usernameInput.value && passwordInput.value) {
-                        const credentials = btoa(`${usernameInput.value}:${passwordInput.value}`);
-                        headers['Authorization'] = `Basic ${credentials}`;
-                    }
+
+            if (useLocalHapi) {
+                if (!localHapiBaseUrl) {
+                    throw new Error("Local HAPI URL not available. Please refresh.");
                 }
-                console.log(`Fetching metadata directly from: ${customUrl}`);
+                fetchUrl = `${localHapiBaseUrl}/metadata`;
+                console.log(`Fetching metadata directly from local URL: ${fetchUrl}`);
             } else {
-                console.log("Fetching metadata from local HAPI server via proxy");
+                fetchUrl = `${customUrl}/metadata`;
+                // Add authentication headers for the direct request to the custom server
+                const authType = authTypeSelect.value;
+                if (authType === 'bearer' && bearerTokenInput && bearerTokenInput.value) {
+                    headers['Authorization'] = `Bearer ${bearerTokenInput.value}`;
+                } else if (authType === 'basic' && usernameInput && passwordInput && usernameInput.value && passwordInput.value) {
+                    const credentials = btoa(`${usernameInput.value}:${passwordInput.value}`);
+                    headers['Authorization'] = `Basic ${credentials}`;
+                }
+                console.log(`Fetching metadata directly from custom URL: ${fetchUrl}`);
             }
-            console.log(`Fetch URL: ${fetchUrl}`);
+
             console.log(`Request Headers sent: ${JSON.stringify(headers)}`);
 
             const response = await fetch(fetchUrl, { method: 'GET', headers: headers });
@@ -381,9 +405,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const currentFhirServerUrl = useLocalHapi ? null : fhirServerUrlInput.value.trim();
-        if (!useLocalHapi && !currentFhirServerUrl) {
-            alert('Custom FHIR Server URL is required.');
+        const currentFhirServerUrl = useLocalHapi ? localHapiBaseUrl : fhirServerUrlInput.value.trim();
+        if (!currentFhirServerUrl) {
+            alert('FHIR Server URL is required.');
             fhirServerUrlInput.classList.add('is-invalid');
             retrieveButton.disabled = false;
             if (spinner) spinner.style.display = 'none';
@@ -396,14 +420,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (csrfTokenInput) formData.append('csrf_token', csrfTokenInput.value);
         selectedResources.forEach(res => formData.append('resources', res));
 
-        // --- FIX APPLIED HERE ---
-        if (!useLocalHapi && currentFhirServerUrl) {
-            formData.append('fhir_server_url', currentFhirServerUrl);
-        } else {
-            // Explicitly use the proxy URL if local HAPI is selected
-            formData.append('fhir_server_url', '/fhir');
-        }
-        // --- END FIX ---
+        formData.append('fhir_server_url', currentFhirServerUrl);
 
         if (validateReferencesCheckbox) {
             formData.append('validate_references', validateReferencesCheckbox.checked ? 'true' : 'false');
@@ -688,7 +705,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Initial Setup Calls ---
     updateBundleSourceUI();
-    updateServerToggleUI();
+    fetchLocalUrlAndSetUI();
     toggleFetchReferenceBundles();
 });
 </script>

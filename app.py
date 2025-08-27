@@ -536,6 +536,29 @@ def restart_tomcat():
 def config_hapi():
     return render_template('config_hapi.html', site_name='FHIRFLARE IG Toolkit', now=datetime.datetime.now())
 
+@app.route('/api/get-local-server-url', methods=['GET'])
+@swag_from({
+    'tags': ['FHIR Server Configuration'],
+    'summary': 'Get the local FHIR server URL.',
+    'description': 'Retrieves the base URL of the configured local FHIR server (HAPI). This is used by frontend components to make direct requests, bypassing the proxy.',
+    'responses': {
+        '200': {
+            'description': 'The URL of the local FHIR server.',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'url': {'type': 'string', 'example': 'http://localhost:8080/fhir'}
+                }
+            }
+        }
+    }
+})
+def get_local_server_url():
+    """
+    Expose the local HAPI FHIR server URL to the frontend.
+    """
+    return jsonify({'url': app.config.get('HAPI_FHIR_URL', 'http://localhost:8080/fhir')})
+
 @app.route('/manual-import-ig', methods=['GET', 'POST'])
 def manual_import_ig():
     """
