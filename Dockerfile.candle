@@ -3,7 +3,9 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0
 
 # Install build dependencies, Node.js 18, and coreutils (for stdbuf)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-venv curl coreutils git \
+    python3 python3-pip python3-venv \
+    default-jre-headless \
+    curl coreutils git \
     && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*

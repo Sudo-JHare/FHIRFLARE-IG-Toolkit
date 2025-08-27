@@ -1,8 +1,10 @@
 # Base image with Python and Node.js
 FROM python:3.9-slim
 
-# Install Node.js 18 and npm
+# Install JRE and other dependencies for the validator
+# We need to install `default-jre-headless` to get a minimal Java Runtime Environment
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    default-jre-headless \
     curl coreutils git \
     && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
