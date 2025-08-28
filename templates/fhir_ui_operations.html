@@ -114,14 +114,7 @@
         <p class="lead mb-4">
             Explore FHIR server operations by selecting resource types or system operations. Toggle between local Server or a custom server to interact with FHIR metadata, resources, and server-wide operations.
         </p>
-        <!-----------------------------------------------------------------remove the buttons-----------------------------------------------------
-        <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
-            <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg px-4 gap-3">Back to Home</a>
-            <a href="{{ url_for('fhir_ui') }}" class="btn btn-outline-secondary btn-lg px-4">FHIR API Explorer</a>
-            <a href="{{ url_for('validate_sample') }}" class="btn btn-outline-secondary btn-lg px-4">Validate FHIR Sample</a>
         </div>
-        ------------------------------------------------------------------------------------------------------------------------------------------>
-    </div>
 </div>
 
 <div class="container mt-4">
@@ -134,11 +127,12 @@
                     <label class="form-label fw-bold">FHIR Server</label>
                     <div class="input-group">
                         <button type="button" class="btn btn-outline-primary" id="toggleServer">
-                            <span id="toggleLabel">Use Local </span>
+                            <span id="toggleLabel">Use Local Server</span>
                         </button>
                         <input type="text" class="form-control" id="fhirServerUrl" name="fhir_server_url" placeholder="Enter FHIR Base URL e.g., https://hapi.fhir.org/baseR4" style="display: none;" aria-describedby="fhirServerHelp">
                     </div>
                     <small id="fhirServerHelp" class="form-text text-muted">Toggle to use local Fhir Server (/fhir proxy) or enter a custom FHIR server URL.</small>
+                    <small id="fhirServerHelp1" class="form-text text-muted">To enable the input fields you will have to toggle the server button when changing options (Issue Raised)</small>                    
                 </div>
                 <div class="mb-3" id="authSection" style="display: none;">
                     <label class="form-label fw-bold">Authentication</label>
@@ -367,7 +361,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const authSection = document.getElementById('authSection');
     const authTypeSelect = document.getElementById('authType');
     const authInputsGroup = document.getElementById('authInputsGroup');
-    const bearerTokenInput = document.getElementById('bearerToken');
+    const bearerTokenInput = document.getElementById('bearerTokenInput');
+    const basicAuthInputs = document.getElementById('basicAuthInputs');
     const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
     if (!toggleServerButton || !toggleLabel || !fhirServerUrlInput || !authSection || !authTypeSelect) {
@@ -413,9 +408,14 @@ function updateAuthInputsUI() {
     authInputsGroup.style.display = (authType === 'bearer' || authType === 'basic') ? 'block' : 'none';
     bearerTokenInput.style.display = authType === 'bearer' ? 'block' : 'none';
     basicAuthInputs.style.display = authType === 'basic' ? 'block' : 'none';
-    if (authType !== 'bearer' && bearerTokenInput) bearerTokenInput.value = '';
-    if (authType !== 'basic' && usernameInput) usernameInput.value = '';
-    if (authType !== 'basic' && passwordInput) passwordInput.value = '';
+    if (authType !== 'bearer') {
+        const tokenInput = document.getElementById('bearerToken');
+        if (tokenInput) tokenInput.value = '';
+    }
+    if (authType !== 'basic') {
+        if (usernameInput) usernameInput.value = '';
+        if (passwordInput) passwordInput.value = '';
+    }
     console.log(`[updateAuthInputsUI] authInputsGroup display: ${authInputsGroup.style.display}, bearer: ${bearerTokenInput.style.display}, basic: ${basicAuthInputs.style.display}`);
 }
 
@@ -445,7 +445,7 @@ function updateAuthInputsUI() {
             toggleServerButton.style.pointerEvents = 'auto';
             toggleServerButton.removeAttribute('aria-disabled');
             toggleServerButton.title = "";
-            toggleLabel.textContent = isUsingLocalHapi ? 'Use Local HAPI' : 'Use Custom URL';
+            toggleLabel.textContent = isUsingLocalHapi ? 'Use Local Server' : 'Use Custom URL';
             fhirServerUrlInput.style.display = isUsingLocalHapi ? 'none' : 'block';
             fhirServerUrlInput.placeholder = "Enter FHIR Base URL e.g., https://hapi.fhir.org/baseR4";
             authSection.style.display = isUsingLocalHapi ? 'none' : 'block';
@@ -533,6 +533,7 @@ function updateAuthInputsUI() {
 
         isUsingLocalHapi = !isUsingLocalHapi;
         updateServerToggleUI();
+        updateAuthInputsUI();
 
         if (isUsingLocalHapi && fhirServerUrlInput) {
             fhirServerUrlInput.value = '';
@@ -543,7 +544,7 @@ function updateAuthInputsUI() {
         fetchedMetadataCache = null;
         availableSystemOperations = [];
         operationDefinitionCache = {};
-        console.log(`Server toggled (Standalone): Now using ${isUsingLocalHapi ? 'Local HAPI' : 'Custom URL'}`);
+        console.log(`Server toggled (Standalone): Now using ${isUsingLocalHapi ? 'Use Local Server' : 'Use Custom URL'}`);
     }
 
     if (toggleServerButton) {
@@ -1068,7 +1069,7 @@ function updateAuthInputsUI() {
                      </div>
                      <div class="opblock-section responses-section">
                           <div class="opblock-section-header"><h4>Example Response / Schema</h4></div><table class="responses-table"><thead><tr class="responses-header"><td class="response-col_status">Code</td><td class="response-col_description">Description</td></tr></thead><tbody><tr class="response" data-code="200"><td class="response-col_status">200</td><td class="response-col_description"><div class="response-col_description__inner"><div class="renderedMarkdown"><p>Success</p></div></div><section class="response-controls mb-2"><div class="row g-2 align-items-center mb-1">
-                          <div class="col-auto"><label for="${blockId}-example-media-type" class="response-control-media-type__title mb-0">Example Format:</label></div><div class="col-auto"><div class="content-type-wrapper"><select id="${blockId}-example-media-type" aria-label="Example Media Type" class="content-type example-media-type-select form-select form-select-sm" style="width: auto;"><option value="application/fhir+json">JSON</option><option value="application/fhir+xml">XML</option></select></div></div><div class="col"><small class="response-control-media-type__accept-message text-muted">Controls example/schema format.</small></div></div></section><div class="model-example"><ul class="tab list-unstyled ps-0 mb-2" role="tablist"><li class="tabitem active"><button class="tablinks badge active" data-name="example">Example Value</button></li><li class="tabitem"><button class="tablinks badge" data-name="schema">Schema</button></li></ul><div class="example-panel" style="display: block;"><div class="highlight-code"><pre class="example-code-display"><code class="language-json">${query.example && typeof query.example === 'string' ? query.example : '{}'}</code></pre></div></div><div class="schema-panel" style="display: none;"><div class="highlight-code"><pre class="schema-code-display"><code class="language-json">${JSON.stringify(query.schema || {}, null, 2)}</code></pre></div></div></div></td></tr><tr class="response" data-code="4xx/5xx"><td class="response-col_status">4xx/5xx</td><td class="response-col_description"><p>Error (e.g., Not Found, Server Error)</p></td></tr></tbody></table>
+                          <div class="col-auto"><label for="${blockId}-example-media-type" class="response-control-media-type__title mb-0">Example Format:</label></div><div class="col-auto"><div class="content-type-wrapper"><select id="${blockId}-example-media-type" aria-label="Example Media Type" class="content-type example-media-type-select form-select form-select-sm" style="width: auto;"><option value="application/fhir+json">JSON</option><option value="application/fhir+xml">XML</option></select></div></div><div class="col"><small class="response-control-media-type__accept-message text-muted">Controls example/schema format.</small></div></div></section><div class="model-example"><ul class="tab list-unstyled ps-0 mb-2" role="tablist"><li class="tabitem active"><button class="tablinks badge active" data-name="example">Example Value</button></li><li class="tabitem"><button class="tablinks badge" data-name="schema">Schema</button></li></ul><div class="example-panel" style="display: block;"><div class="highlight-code"><pre class="request-example-code"><code class="language-json">${query.example && typeof query.example === 'string' ? query.example : '{}'}</code></pre></div></div><div class="schema-panel" style="display: none;"><div class="highlight-code"><pre class="schema-code-display"><code class="language-json">${JSON.stringify(query.schema || {}, null, 2)}</code></pre></div></div></div></td></tr><tr class="response" data-code="4xx/5xx"><td class="response-col_status">4xx/5xx</td><td class="response-col_description"><p>Error (e.g., Not Found, Server Error)</p></td></tr></tbody></table>
                      </div>
                  </div>`;
              queryListContainer.appendChild(block);
@@ -1090,20 +1091,19 @@ function updateAuthInputsUI() {
             const curlOutput = executeWrapper?.querySelector('.curl-output code');
             const copyCurlButton = executeWrapper?.querySelector('.copy-curl-btn');
             const copyRespButton = executeWrapper?.querySelector('.copy-response-btn');
-            const downloadRespButton = executeWrapper?.querySelector('.download-response-btn');
+            const downloadRespButton = executeWrapper?.querySelector('.copy-response-btn');
             const exampleMediaTypeSelect = block.querySelector('.example-media-type-select');
             const exampleTabs = block.querySelectorAll('.responses-section .tablinks.badge');
             const examplePanel = block.querySelector('.responses-section .example-panel');
             const schemaPanel = block.querySelector('.responses-section .schema-panel');
 
-
             if (opblockSummary) {
-                 opblockSummary.addEventListener('click', (e) => {
+                opblockSummary.addEventListener('click', (e) => {
                     if (e.target.closest('button, a, input, select')) return;
                     const wasOpen = block.classList.contains('is-open');
                     block.classList.toggle('is-open', !wasOpen);
                     if(opblockBody) opblockBody.style.display = wasOpen ? 'none' : 'block';
-                 });
+                });
             }
 
             if (tryButton && executeButton) {
@@ -1113,22 +1113,22 @@ function updateAuthInputsUI() {
                     paramInputs.forEach(input => {
                         input.disabled = !enable;
                         if (!enable) {
-                             input.classList.remove('is-invalid');
-                             if (input.type === 'checkbox') {
-                                 input.checked = false;
-                             } else if (input.tagName === 'SELECT') {
-                                  const exampleValue = input.dataset.example;
-                                  if (exampleValue && input.querySelector(`option[value="${exampleValue}"]`)) { input.value = exampleValue; }
-                                  else if (input.options.length > 0) { input.selectedIndex = 0; }
-                             } else {
-                                  input.value = input.dataset.example || '';
-                             }
+                            input.classList.remove('is-invalid');
+                            if (input.type === 'checkbox') {
+                                input.checked = false;
+                            } else if (input.tagName === 'SELECT') {
+                                const exampleValue = input.dataset.example;
+                                if (exampleValue && input.querySelector(`option[value="${exampleValue}"]`)) { input.value = exampleValue; }
+                                else if (input.options.length > 0) { input.selectedIndex = 0; }
+                            } else {
+                                input.value = input.dataset.example || '';
+                            }
                         }
                     });
                     if (reqBodyTextarea) reqBodyTextarea.disabled = !enable;
                     if (reqContentTypeSelect) reqContentTypeSelect.disabled = !enable;
                     if (!enable && reqBodyTextarea && !query.parameters.some(p => p.in === 'body (Parameters)')) {
-                         reqBodyTextarea.value = (query.method === 'POST' && query.path.endsWith('_search')) ? query.example : '';
+                        reqBodyTextarea.value = (query.method === 'POST' && query.path.endsWith('_search')) ? query.example : '';
                     }
                     tryButton.textContent = enable ? 'Cancel' : 'Try it out';
                     tryButton.classList.toggle('cancel', enable);
@@ -1151,9 +1151,9 @@ function updateAuthInputsUI() {
             }
 
             if (reqContentTypeSelect && reqBodyTextarea && tryButton) {
-                 const reqExampleCode = block.querySelector('.request-example-code code');
-                 const reqExampleContainer = block.querySelector('.request-body-example');
-                 reqContentTypeSelect.addEventListener('change', () => {
+                const reqExampleCode = block.querySelector('.request-example-code code');
+                const reqExampleContainer = block.querySelector('.request-body-example');
+                reqContentTypeSelect.addEventListener('change', () => {
                     const type = reqContentTypeSelect.value;
                     const isFormUrlEncoded = type === 'application/x-www-form-urlencoded';
                     const isJsonParams = type === 'application/fhir+json' && query.parameters.some(p => p.in === 'body (Parameters)');
@@ -1177,8 +1177,8 @@ function updateAuthInputsUI() {
                             reqExampleCode.className = 'language-xml'; reqExampleCode.textContent = jsonToFhirXml(jsonExample); Prism.highlightElement(reqExampleCode);
                         }
                     }
-                 });
-                 reqContentTypeSelect.dispatchEvent(new Event('change'));
+                });
+                reqContentTypeSelect.dispatchEvent(new Event('change'));
             }
 
             if (executeButton && executeWrapper && respStatusDiv && reqUrlOutput && curlOutput && respFormatSelect && copyRespButton && downloadRespButton && respOutputCode && respNarrativeDiv && respOutputPre) {
@@ -1223,14 +1223,30 @@ function updateAuthInputsUI() {
                     
                     if (!isUsingLocalHapi) {
                         const authType = authTypeSelect.value;
-                        const bearerToken = bearerTokenInput.value.trim();
-                        const username = usernameInput.value.trim();
-                        const password = passwordInput.value;
+                        const bearerTokenValue = document.getElementById('bearerToken').value.trim();
+                        const usernameValue = document.getElementById('username').value.trim();
+                        const passwordValue = document.getElementById('password').value;
+
                         if (authType === 'bearer') {
-                            headers['Authorization'] = `Bearer ${bearerToken}`;
+                            if (!bearerTokenValue) {
+                                alert('Please enter a Bearer Token.');
+                                document.getElementById('bearerToken').classList.add('is-invalid');
+                                executeButton.disabled = false;
+                                executeButton.textContent = 'Execute';
+                                return;
+                            }
+                            headers['Authorization'] = `Bearer ${bearerTokenValue}`;
                             console.log("Adding header Authorization: Bearer <truncated>");
                         } else if (authType === 'basic') {
-                            headers['Authorization'] = `Basic ${btoa(`${username}:${password}`)}`;
+                            if (!usernameValue || !passwordValue) {
+                                alert('Please enter both Username and Password for Basic Authentication.');
+                                if (!usernameValue) document.getElementById('username').classList.add('is-invalid');
+                                if (!passwordValue) document.getElementById('password').classList.add('is-invalid');
+                                executeButton.disabled = false;
+                                executeButton.textContent = 'Execute';
+                                return;
+                            }
+                            headers['Authorization'] = `Basic ${btoa(`${usernameValue}:${passwordValue}`)}`;
                             console.log("Adding header Authorization: Basic <redacted>");
                         }
                     }
@@ -1618,8 +1634,8 @@ function updateAuthInputsUI() {
                 url = '/fhir/metadata';
                 headers['X-Target-FHIR-Server'] = customUrl;
                 const authType = authTypeSelect.value;
-                if (authType === 'bearer' && bearerTokenInput && bearerTokenInput.value) {
-                    headers['Authorization'] = `Bearer ${bearerTokenInput.value}`;
+                if (authType === 'bearer' && document.getElementById('bearerToken') && document.getElementById('bearerToken').value) {
+                    headers['Authorization'] = `Bearer ${document.getElementById('bearerToken').value}`;
                 } else if (authType === 'basic' && usernameInput && passwordInput && usernameInput.value && passwordInput.value) {
                     const credentials = btoa(`${usernameInput.value}:${passwordInput.value}`);
                     headers['Authorization'] = `Basic ${credentials}`;
@@ -1700,7 +1716,7 @@ function updateAuthInputsUI() {
              if (diagnostics) {
                 html += `<p class="mb-0 mt-1 small"><em>Diagnostics: ${diagnostics}</em></p>`;
             }
-            html += `</li>`;
+            html += '</li>';
         });
 
         html += '</ul>';

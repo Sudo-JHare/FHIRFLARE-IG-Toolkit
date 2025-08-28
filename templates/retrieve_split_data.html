@@ -32,7 +32,7 @@
                     <label class="form-label fw-bold">FHIR Server</label>
                     <div class="input-group">
                         <button type="button" class="btn btn-outline-primary" id="toggleServer">
-                            <span id="toggleLabel">Use Local </span>
+                            <span id="toggleLabel">Use Local Server</span>
                         </button>
                         {{ form.fhir_server_url(class="form-control", id="fhirServerUrl", style="display: none;", placeholder="e.g., https://fhir.hl7.org.au/aucore/fhir/DEFAULT", **{'aria-describedby': 'fhirServerHelp'}) }}
                     </div>
@@ -162,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const authSection = document.getElementById('authSection');
     const authTypeSelect = document.getElementById('authType');
     const authInputsGroup = document.getElementById('authInputsGroup');
-    const bearerTokenInput = document.getElementById('bearerToken');
+    const bearerTokenInput = document.getElementById('bearerTokenInput');
     const basicAuthInputs = document.getElementById('basicAuthInputs');
     const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
@@ -221,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleServerButton.classList.remove('disabled');
             toggleServerButton.style.pointerEvents = 'auto';
             toggleServerButton.removeAttribute('aria-disabled');
-            toggleLabel.textContent = useLocalHapi ? 'Using Local HAPI' : 'Using Custom URL';
+            toggleLabel.textContent = useLocalHapi ? 'Use Local Server' : 'Use Custom URL';
             fhirServerUrlInput.style.display = useLocalHapi ? 'none' : 'block';
             fhirServerUrlInput.placeholder = "e.g., https://hapi.fhir.org/baseR4";
             fhirServerUrlInput.required = !useLocalHapi;
@@ -237,9 +237,15 @@ document.addEventListener('DOMContentLoaded', () => {
         authInputsGroup.style.display = (authType === 'bearer' || authType === 'basic') ? 'block' : 'none';
         bearerTokenInput.style.display = authType === 'bearer' ? 'block' : 'none';
         basicAuthInputs.style.display = authType === 'basic' ? 'block' : 'none';
-        if (authType !== 'bearer' && bearerTokenInput) bearerTokenInput.value = '';
-        if (authType !== 'basic' && usernameInput) usernameInput.value = '';
-        if (authType !== 'basic' && passwordInput) passwordInput.value = '';
+        if (authType !== 'bearer') {
+            // Correctly reference the input element by its ID
+            const tokenInput = document.getElementById('bearerToken');
+            if (tokenInput) tokenInput.value = '';
+        }
+        if (authType !== 'basic') {
+            if (usernameInput) usernameInput.value = '';
+            if (passwordInput) passwordInput.value = '';
+        }
     }
     function toggleFetchReferenceBundles() {
         if (validateReferencesCheckbox && fetchReferenceBundlesGroup) {
@@ -260,6 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
         useLocalHapi = !useLocalHapi;
         if (useLocalHapi) fhirServerUrlInput.value = '';
         updateServerToggleUI();
+        updateAuthInputsUI();
         resourceTypesDiv.style.display = 'none';
         fetchedMetadataCache = null;
         console.log(`Server toggled: useLocalHapi=${useLocalHapi}`);
@@ -308,8 +315,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 fetchUrl = `${customUrl}/metadata`;
                 // Add authentication headers for the direct request to the custom server
                 const authType = authTypeSelect.value;
-                if (authType === 'bearer' && bearerTokenInput && bearerTokenInput.value) {
-                    headers['Authorization'] = `Bearer ${bearerTokenInput.value}`;
+                if (authType === 'bearer' && document.getElementById('bearerToken') && document.getElementById('bearerToken').value) {
+                    headers['Authorization'] = `Bearer ${document.getElementById('bearerToken').value}`;
                 } else if (authType === 'basic' && usernameInput && passwordInput && usernameInput.value && passwordInput.value) {
                     const credentials = btoa(`${usernameInput.value}:${passwordInput.value}`);
                     headers['Authorization'] = `Basic ${credentials}`;
@@ -404,15 +411,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!useLocalHapi && authTypeSelect) {
             const authType = authTypeSelect.value;
             formData.append('auth_type', authType);
-            if (authType === 'bearer' && bearerTokenInput) {
-                if (!bearerTokenInput.value) {
+            if (authType === 'bearer') {
+                const bearerToken = document.getElementById('bearerToken').value.trim();
+                if (!bearerToken) {
                     alert('Please enter a Bearer Token.');
                     retrieveButton.disabled = false;
                     if (spinner) spinner.style.display = 'none';
                     if (icon) icon.style.display = 'inline-block';
                     return;
                 }
-                formData.append('bearer_token', bearerTokenInput.value);
+                formData.append('bearer_token', bearerToken);
             } else if (authType === 'basic' && usernameInput && passwordInput) {
                 if (!usernameInput.value || !passwordInput.value) {
                     alert('Please enter both Username and Password for Basic Authentication.');

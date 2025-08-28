@@ -6,7 +6,7 @@
     <h1 class="display-5 fw-bold text-body-emphasis">FHIR API Explorer</h1>
     <div class="col-lg-6 mx-auto">
         <p class="lead mb-4">
-            Interact with FHIR servers using GET, POST, PUT, or DELETE requests. Toggle between local Fhir Server or a custom server to explore resources or perform searches.
+            Interact with FHIR servers using GET, POST, PUT, or DELETE requests. Toggle between local HAPI or a custom server to explore resources or perform searches.
         </p>
     </div>
 </div>
@@ -21,11 +21,11 @@
                     <label class="form-label">FHIR Server</label>
                     <div class="input-group">
                         <button type="button" class="btn btn-outline-primary" id="toggleServer">
-                            <span id="toggleLabel">Use Local </span>
+                            <span id="toggleLabel">Use Local Server</span>
                         </button>
                         <input type="text" class="form-control" id="fhirServerUrl" name="fhir_server_url" placeholder="e.g., https://hapi.fhir.org/baseR4" style="display: none;" aria-describedby="fhirServerHelp">
                     </div>
-                    <small id="fhirServerHelp" class="form-text text-muted">Toggle to use local (http://localhost:8080/fhir) or enter a custom FHIR server URL.</small>
+                    <small id="fhirServerHelp" class="form-text text-muted">Toggle to use local HAPI (http://localhost:8080/fhir) or enter a custom FHIR server URL.</small>
                 </div>
                 <div class="mb-3" id="authSection" style="display: none;">
                     <label class="form-label">Authentication</label>
@@ -126,7 +126,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const authSection = document.getElementById('authSection');
     const authTypeSelect = document.getElementById('authType');
     const authInputsGroup = document.getElementById('authInputsGroup');
-    const bearerTokenInput = document.getElementById('bearerToken');
+    const bearerTokenInput = document.getElementById('bearerTokenInput');
     const basicAuthInputs = document.getElementById('basicAuthInputs');
     const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
@@ -141,7 +141,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- State Variable ---
     let useLocalHapi = true;
-    let localHapiBaseUrl = ''; // New variable to store the fetched URL
 
     // --- Get App Mode from Flask Context ---
     const appMode = '{{ app_mode | default("standalone") | lower }}';
@@ -194,22 +193,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { console.error('Copy failed:', err); }
     }
 
-    async function fetchLocalUrlAndSetUI() {
-        try {
-            const response = await fetch('/api/get-local-server-url');
-            if (!response.ok) throw new Error('Failed to fetch local server URL.');
-            const data = await response.json();
-            localHapiBaseUrl = data.url;
-            console.log(`Local HAPI URL fetched: ${localHapiBaseUrl}`);
-        } catch (error) {
-            console.error(error);
-            localHapiBaseUrl = '/fhir'; // Fallback to proxy
-            alert('Could not fetch local HAPI server URL. Falling back to proxy.');
-        } finally {
-            updateServerToggleUI();
-        }
-    }
-
     function updateServerToggleUI() {
         if (appMode === 'lite') {
             useLocalHapi = false;
@@ -229,7 +212,7 @@ document.addEventListener('DOMContentLoaded', function() {
             toggleServerButton.style.pointerEvents = 'auto';
             toggleServerButton.removeAttribute('aria-disabled');
             toggleServerButton.title = "Toggle between Local HAPI and Custom URL";
-            toggleLabel.textContent = useLocalHapi ? 'Using Local HAPI' : 'Using Custom URL';
+            toggleLabel.textContent = useLocalHapi ? 'Using Local Server' : 'Using Custom URL';
             fhirServerUrlInput.style.display = useLocalHapi ? 'none' : 'block';
             fhirServerUrlInput.placeholder = "e.g., https://hapi.fhir.org/baseR4";
             fhirServerUrlInput.required = !useLocalHapi;
@@ -261,7 +244,8 @@ document.addEventListener('DOMContentLoaded', function() {
             fhirServerUrlInput.value = '';
         }
         updateServerToggleUI();
-        console.log(`Server toggled: Now using ${useLocalHapi ? 'Local HAPI' : 'Custom URL'}`);
+        updateAuthInputsUI();
+        console.log(`Server toggled: Now using ${useLocalHapi ? 'Local Server' : 'Custom URL'}`);
     }
 
     function updateRequestBodyVisibility() {
@@ -277,7 +261,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // --- Initial Setup ---
-    fetchLocalUrlAndSetUI(); // Fetch the URL and then set up the UI
+    updateServerToggleUI();
     updateRequestBodyVisibility();
 
     // --- Event Listeners ---
@@ -312,7 +296,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const customUrl = fhirServerUrlInput.value.trim();
         let body = undefined;
         const authType = authTypeSelect ? authTypeSelect.value : 'none';
-        const bearerToken = bearerTokenInput ? bearerTokenInput.value.trim() : '';
+        const bearerToken = document.getElementById('bearerToken').value.trim();
         const username = usernameInput ? usernameInput.value.trim() : '';
         const password = passwordInput ? passwordInput.value : '';
 
@@ -329,30 +313,14 @@ document.addEventListener('DOMContentLoaded', function() {
             sendButton.textContent = 'Send Request';
             return;
         }
-
-        // --- Determine Final URL & Headers ---
-        const cleanedPath = cleanFhirPath(path);
-        const headers = { 'Accept': 'application/fhir+json, application/fhir+xml;q=0.9, */*;q=0.8' };
-        let finalFetchUrl;
-
-        if (useLocalHapi) {
-            if (!localHapiBaseUrl) {
-                alert('Local HAPI URL not available. Please refresh the page.');
-                sendButton.disabled = false;
-                sendButton.textContent = 'Send Request';
-                return;
-            }
-            // Direct request to the local URL
-            finalFetchUrl = `${localHapiBaseUrl.replace(/\/+$/, '')}/${cleanedPath}`;
-        } else {
-            // Use the proxy for custom URLs
-            if (!customUrl) {
-                alert('Please enter a custom FHIR Server URL.');
-                fhirServerUrlInput.classList.add('is-invalid');
-                sendButton.disabled = false;
-                sendButton.textContent = 'Send Request';
-                return;
-            }
+        if (!useLocalHapi && !customUrl) {
+            alert('Please enter a custom FHIR Server URL.');
+            fhirServerUrlInput.classList.add('is-invalid');
+            sendButton.disabled = false;
+            sendButton.textContent = 'Send Request';
+            return;
+        }
+        if (!useLocalHapi && customUrl) {
             try { new URL(customUrl); }
             catch (_) {
                 alert('Invalid custom FHIR Server URL format.');
@@ -361,19 +329,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 sendButton.textContent = 'Send Request';
                 return;
             }
-            finalFetchUrl = '/fhir/' + cleanedPath;
-            headers['X-Target-FHIR-Server'] = customUrl.replace(/\/+$/, '');
-            console.log("Adding header X-Target-FHIR-Server:", headers['X-Target-FHIR-Server']);
-            if (authType === 'bearer') {
-                headers['Authorization'] = `Bearer ${bearerToken}`;
-                console.log("Adding header Authorization: Bearer <truncated>");
-            } else if (authType === 'basic') {
-                const credentials = btoa(`${username}:${password}`);
-                headers['Authorization'] = `Basic ${credentials}`;
-                console.log("Adding header Authorization: Basic <redacted>");
+        }
+
+        // --- Validate Authentication ---
+        if (!useLocalHapi) {
+            if (authType === 'bearer' && !bearerToken) {
+                alert('Please enter a Bearer Token.');
+                document.getElementById('bearerToken').classList.add('is-invalid');
+                sendButton.disabled = false;
+                sendButton.textContent = 'Send Request';
+                return;
+            }
+            if (authType === 'basic' && (!username || !password)) {
+                alert('Please enter both Username and Password for Basic Authentication.');
+                if (!username) usernameInput.classList.add('is-invalid');
+                if (!password) passwordInput.classList.add('is-invalid');
+                sendButton.disabled = false;
+                sendButton.textContent = 'Send Request';
+                return;
             }
         }
-        
+
         // --- Validate & Get Body ---
         if (method === 'POST' || method === 'PUT') {
             body = validateRequestBody(method, path);
@@ -384,6 +360,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             if (body === '') body = '';
+        }
+
+        // --- Determine Fetch URL and Headers ---
+        const cleanedPath = cleanFhirPath(path);
+        const finalFetchUrl = '/fhir/' + cleanedPath;
+        const headers = { 'Accept': 'application/fhir+json, application/fhir+xml;q=0.9, */*;q=0.8' };
+
+        if (body !== undefined) {
+            if (body.trim().startsWith('{')) { headers['Content-Type'] = 'application/fhir+json'; }
+            else if (body.trim().startsWith('<')) { headers['Content-Type'] = 'application/fhir+xml'; }
+            else if (method === 'POST' && path.endsWith('_search') && body && !body.trim().startsWith('{') && !body.trim().startsWith('<')) { headers['Content-Type'] = 'application/x-www-form-urlencoded'; }
+            else if (body) { headers['Content-Type'] = 'application/fhir+json'; }
+        }
+
+        if (!useLocalHapi && customUrl) {
+            headers['X-Target-FHIR-Server'] = customUrl.replace(/\/+$/, '');
+            console.log("Adding header X-Target-FHIR-Server:", headers['X-Target-FHIR-Server']);
+            if (authType === 'bearer') {
+                headers['Authorization'] = `Bearer ${bearerToken}`;
+                console.log("Adding header Authorization: Bearer <truncated>");
+            } else if (authType === 'basic') {
+                const credentials = btoa(`${username}:${password}`);
+                headers['Authorization'] = `Basic ${credentials}`;
+                console.log("Adding header Authorization: Basic <redacted>");
+            }
         }
 
         const csrfTokenInput = form.querySelector('input[name="csrf_token"]');
@@ -453,7 +454,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('Fetch error:', error);
             responseCard.style.display = 'block';
-            responseStatus.textContent = `Network Error`;
+            responseStatus.textContent = 'Network Error';
             responseStatus.className = 'badge bg-danger';
             responseHeaders.textContent = 'N/A';
             let errorDetail = `Error: ${error.message}\n\n`;
