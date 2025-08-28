@@ -312,3 +312,58 @@ class IgYamlForm(FlaskForm):
     """Form to select IGs for YAML generation."""
     igs = SelectMultipleField('Select IGs to include', validators=[DataRequired()])
     generate_yaml = SubmitField('Generate YAML')
+
+# --- New ValidationForm class for the new page ---
+class ValidationForm(FlaskForm):
+    """Form for validating a single FHIR resource with various options."""
+    # Added fields to match the HTML template
+    package_name = StringField('Package Name', validators=[Optional()])
+    version = StringField('Package Version', validators=[Optional()])
+    
+    # Main content fields
+    fhir_resource = TextAreaField('FHIR Resource (JSON or XML)', validators=[InputRequired()],
+                                  render_kw={'placeholder': 'Paste your FHIR JSON here...'})
+    fhir_version = SelectField('FHIR Version', choices=[
+        ('4.0.1', 'R4 (4.0.1)'),
+        ('3.0.2', 'STU3 (3.0.2)'),
+        ('5.0.0', 'R5 (5.0.0)')
+    ], default='4.0.1', validators=[DataRequired()])
+    
+    # Flags and options from validator settings.pdf
+    do_native = BooleanField('Native Validation (doNative)')
+    hint_about_must_support = BooleanField('Must Support (hintAboutMustSupport)')
+    assume_valid_rest_references = BooleanField('Assume Valid Rest References (assumeValidRestReferences)')
+    no_extensible_binding_warnings = BooleanField('Extensible Binding Warnings (noExtensibleBindingWarnings)')
+    show_times = BooleanField('Show Times (-show-times)')
+    allow_example_urls = BooleanField('Allow Example URLs (-allow-example-urls)')
+    check_ips_codes = BooleanField('Check IPS Codes (-check-ips-codes)')
+    allow_any_extensions = BooleanField('Allow Any Extensions (-allow-any-extensions)')
+    tx_routing = BooleanField('Show Terminology Routing (-tx-routing)')
+    
+    # SNOMED CT options
+    snomed_ct_version = SelectField('Select SNOMED Version', choices=[
+        ('', '-- No selection --'),
+        ('intl', 'International edition (900000000000207008)'),
+        ('us', 'US edition (731000124108)'),
+        ('uk', 'United Kingdom Edition (999000041000000102)'),
+        ('es', 'Spanish Language Edition (449081005)'),
+        ('nl', 'Netherlands Edition (11000146104)'),
+        ('ca', 'Canadian Edition (20611000087101)'),
+        ('dk', 'Danish Edition (554471000005108)'),
+        ('se', 'Swedish Edition (45991000052106)'),
+        ('au', 'Australian Edition (32506021000036107)'),
+        ('be', 'Belgium Edition (11000172109)')
+    ], validators=[Optional()])
+    
+    # Text input fields
+    profiles = StringField('Profiles',
+                           validators=[Optional()],
+                           render_kw={'placeholder': 'e.g. http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient'})
+    extensions = StringField('Extensions',
+                             validators=[Optional()],
+                             render_kw={'placeholder': 'e.g. http://hl7.org/fhir/StructureDefinition/elementdefinition-namespace'})
+    terminology_server = StringField('Terminology Server',
+                                     validators=[Optional()],
+                                     render_kw={'placeholder': 'e.g. http://tx.fhir.org'})
+    
+    submit = SubmitField('Validate')

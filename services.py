@@ -198,6 +198,203 @@ def safe_parse_version(v_str):
          logger.error(f"Unexpected error in safe_parse_version for '{v_str}': {e}")
          return pkg_version.parse("0.0.0a0") # Fallback
 
+# --- New Function to run the FHIR Validator CLI ---
+def run_validator_cli(resource_text, fhir_version, igs, profiles, extensions, terminology_server, flags, snomed_ct_version, app_config):
+    """
+    Constructs and runs the Java FHIR Validator CLI command.
+
+    Args:
+        resource_text (str): The FHIR resource/bundle as a string.
+        fhir_version (str): The FHIR version to validate against.
+        igs (list): List of selected IG canonical URLs.
+        profiles (str): Comma-separated list of profile URLs.
+        extensions (str): Comma-separated list of extension URLs.
+        terminology_server (str): The URL of the terminology server.
+        flags (dict): Dictionary of boolean flags for validation.
+        snomed_ct_version (str): The SNOMED CT version to use.
+        app_config (dict): The Flask application configuration.
+
+    Returns:
+        dict: A dictionary containing the validation output and status.
+    """
+    temp_dir = tempfile.mkdtemp(dir=app_config['VALIDATION_LOG_DIR'])
+    
+    # Store the temp directory in the app config for the download endpoint to find it.
+    app_config['VALIDATION_TEMP_DIR'] = temp_dir
+    
+    temp_resource_path = os.path.join(temp_dir, f'resource_{uuid.uuid4()}.json')
+    try:
+        with open(temp_resource_path, 'w', encoding='utf-8') as f:
+            f.write(resource_text)
+    except Exception as e:
+        shutil.rmtree(temp_dir)
+        return {'status': 'error', 'message': f'Failed to write temporary resource file: {e}'}
+
+    output_json_path = os.path.join(temp_dir, 'validation-report.json')
+    output_html_path = os.path.join(temp_dir, 'validation-report.html')
+    
+    command = [
+        'java',
+        '-jar', os.environ.get('JAVA_VALIDATOR_PATH', '/app/validator_cli/validator_cli.jar'),
+        temp_resource_path,
+        '-version', fhir_version,
+        '-output', output_json_path,
+        '-html-output', output_html_path,
+    ]
+
+    # Add flags
+    if flags.get('doNative'):
+        command.append('-do-native')
+    if flags.get('hintAboutMustSupport'):
+        command.append('-hint-about-must-support')
+    if flags.get('assumeValidRestReferences'):
+        command.append('-assume-valid-rest-references')
+    if flags.get('noExtensibleBindingWarnings'):
+        command.append('-no-extensible-binding-warnings')
+    if flags.get('showTimes'):
+        command.append('-show-times')
+    if flags.get('allowExampleUrls'):
+        command.append('-allow-example-urls')
+    if flags.get('checkIpsCodes'):
+        command.append('-check-ips-codes')
+    if flags.get('allowAnyExtensions'):
+        command.append('-allow-any-extensions')
+    if flags.get('txRouting'):
+        command.append('-tx-routing')
+    
+    # Add other options
+    if igs:
+        for ig in igs:
+            command.extend(['-ig', ig])
+    if profiles:
+        command.extend(['-profile', profiles])
+    if extensions:
+        command.extend(['-extension', extensions])
+    if terminology_server:
+        command.extend(['-tx', terminology_server])
+    if snomed_ct_version:
+        command.extend(['-sct', snomed_ct_version])
+
+    logger.info(f"Running validator with command: {' '.join(command)}")
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=300,
+        )
+        
+        stdout = result.stdout
+        stderr = result.stderr
+        
+        logger.debug(f"Validator stdout:\n{stdout}")
+        logger.debug(f"Validator stderr:\n{stderr}")
+
+        # Check for errors in the stdout and stderr
+        if result.returncode != 0 and not os.path.exists(output_json_path):
+            return_dict = {
+                'status': 'error',
+                'output': stderr or "Validation process failed with an unknown error.",
+                'file_paths': {},
+                'errors': [stderr or "Validation process failed with an unknown error."],
+                'warnings': [],
+                'summary': {'error_count': 1, 'warning_count': 0},
+                'results': {}
+            }
+            return return_dict
+        
+        # Now, try to read the JSON file produced by the validator
+        if os.path.exists(output_json_path):
+            with open(output_json_path, 'r', encoding='utf-8') as f:
+                json_report = json.load(f)
+            
+            # Process the JSON report to get a structured summary
+            error_count = 0
+            warning_count = 0
+            errors_list = []
+            warnings_list = []
+            detailed_results = {}
+            is_valid = True
+
+            for issue in json_report.get('issue', []):
+                severity = issue.get('severity')
+                diagnostics = issue.get('diagnostics') or issue.get('details', {}).get('text') or 'No details provided.'
+                resource_expression = issue.get('expression', ['unknown'])[0]
+                
+                # Determine the resource ID and type from the expression, e.g., "AllergyIntolerance" or "AllergyIntolerance[0].extension[0]"
+                resource_id = resource_expression.split('[')[0].split('.')[0]
+                
+                if resource_id not in detailed_results:
+                    detailed_results[resource_id] = {'valid': True, 'details': []}
+                
+                detail = {
+                    'issue': diagnostics,
+                    'severity': severity,
+                    'description': issue.get('details', {}).get('text', diagnostics)
+                }
+                detailed_results[resource_id]['details'].append(detail)
+                
+                if severity == 'error':
+                    error_count += 1
+                    errors_list.append(diagnostics)
+                    is_valid = False
+                    detailed_results[resource_id]['valid'] = False
+                elif severity == 'warning':
+                    warning_count += 1
+                    warnings_list.append(diagnostics)
+
+            # Determine the overall status
+            status = 'success'
+            if error_count > 0:
+                status = 'error'
+            elif warning_count > 0:
+                status = 'warning'
+
+            # Build the final return dictionary
+            return_dict = {
+                'status': status,
+                'valid': is_valid,
+                'output': stdout,
+                'file_paths': {
+                    'json': output_json_path,
+                    'html': output_html_path
+                },
+                'errors': errors_list,
+                'warnings': warnings_list,
+                'summary': {
+                    'error_count': error_count,
+                    'warning_count': warning_count
+                },
+                'results': detailed_results
+            }
+            return return_dict
+        else:
+            # Fallback if validator completed but didn't produce a file
+            return_dict = {
+                'status': 'error',
+                'valid': False,
+                'output': stdout,
+                'file_paths': {},
+                'errors': ["Validator failed to produce the expected output files."],
+                'warnings': [],
+                'summary': {'error_count': 1, 'warning_count': 0},
+                'results': {}
+            }
+            return return_dict
+
+    except FileNotFoundError:
+        return {'status': 'error', 'message': 'Java command or validator JAR not found. Please check paths.'}
+    except subprocess.TimeoutExpired:
+        return {'status': 'error', 'message': 'Validation timed out.'}
+    except Exception as e:
+        return {'status': 'error', 'message': f'An unexpected error occurred during validation: {e}'}
+    finally:
+        # NOTE: We no longer delete the temporary directory here.
+        # It is the responsibility of the `clear-validation-results` endpoint.
+        pass
+
 # --- MODIFIED FUNCTION with Enhanced Logging ---
 def get_additional_registries():
     """Fetches the list of additional FHIR IG registries from the master feed."""
@@ -1108,15 +1305,16 @@ validation_results_cache = {}
 # Thread lock to safely manage access to the cache
 cache_lock = threading.Lock()
 
-def validate_in_thread(app_context, task_id, package_name, version, sample_data):
+def validate_in_thread(app_context, task_id, fhir_resource_text, fhir_version, igs, profiles, extensions, terminology_server, flags, snomed_ct_version):
     """
     Wrapper function to run the blocking validator in a separate thread.
     It acquires an app context and then calls the main validation logic.
     """
     with app_context:
         logger.info(f"Starting validation thread for task ID: {task_id}")
-        # Call the core blocking validation function
-        result = run_java_validator(package_name, version, sample_data)
+        
+        # Call the core blocking validation function, passing all arguments
+        result = run_validator_cli(fhir_resource_text, fhir_version, igs, profiles, extensions, terminology_server, flags, snomed_ct_version, current_app.config)
         
         # Safely update the shared cache with the final result
         with cache_lock:

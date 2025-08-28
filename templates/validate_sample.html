@@ -22,8 +22,9 @@
     <div class="card">
         <div class="card-header">Validation Form</div>
         <div class="card-body">
-            <form id="validationForm">
-                {{ form.hidden_tag() }}
+            <form id="validationForm" method="POST" action="/api/validate">
+                {{ form.csrf_token }}
+
                 <div class="mb-3">
                     <small class="form-text text-muted">
                         Select a package from the list below or enter a new one (e.g., <code>hl7.fhir.us.core</code>).
@@ -46,6 +47,7 @@
                         <div class="text-danger">{{ error }}</div>
                     {% endfor %}
                 </div>
+
                 <div class="mb-3">
                     <label for="{{ form.version.id }}" class="form-label">Package Version</label>
                     {{ form.version(class="form-control", id=form.version.id) }}
@@ -53,36 +55,111 @@
                         <div class="text-danger">{{ error }}</div>
                     {% endfor %}
                 </div>
+
+                <hr class="my-4">
+
+                <!-- New Fields from ValidationForm -->
                 <div class="mb-3">
-                    <label for="{{ form.include_dependencies.id }}" class="form-label">Include Dependencies</label>
-                    <div class="form-check">
-                        {{ form.include_dependencies(class="form-check-input") }}
-                        {{ form.include_dependencies.label(class="form-check-label") }}
+                    <label for="fhir_resource" class="form-label">FHIR Resource (JSON or XML)</label>
+                    {{ form.fhir_resource(class="form-control", rows=10, placeholder="Paste your FHIR JSON here...") }}
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="fhir_version" class="form-label">FHIR Version</label>
+                        {{ form.fhir_version(class="form-select") }}
                     </div>
                 </div>
-                <div class="mb-3">
-                    <label for="{{ form.mode.id }}" class="form-label">Validation Mode</label>
-                    {{ form.mode(class="form-select") }}
+
+                <hr class="my-4">
+
+                <h5>Validation Flags</h5>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="form-check">
+                            {{ form.do_native(class="form-check-input") }}
+                            <label class="form-check-label" for="do_native">{{ form.do_native.label }}</label>
+                        </div>
+                        <div class="form-check">
+                            {{ form.hint_about_must_support(class="form-check-input") }}
+                            <label class="form-check-label" for="hint_about_must_support">{{ form.hint_about_must_support.label }}</label>
+                        </div>
+                        <div class="form-check">
+                            {{ form.assume_valid_rest_references(class="form-check-input") }}
+                            <label class="form-check-label" for="assume_valid_rest_references">{{ form.assume_valid_rest_references.label }}</label>
+                        </div>
+                        <div class="form-check">
+                            {{ form.no_extensible_binding_warnings(class="form-check-input") }}
+                            <label class="form-check-label" for="no_extensible_binding_warnings">{{ form.no_extensible_binding_warnings.label }}</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check">
+                            {{ form.show_times(class="form-check-input") }}
+                            <label class="form-check-label" for="show_times">{{ form.show_times.label }}</label>
+                        </div>
+                        <div class="form-check">
+                            {{ form.allow_example_urls(class="form-check-input") }}
+                            <label class="form-check-label" for="allow_example_urls">{{ form.allow_example_urls.label }}</label>
+                        </div>
+                        <div class="form-check">
+                            {{ form.check_ips_codes(class="form-check-input") }}
+                            <label class="form-check-label" for="check_ips_codes">{{ form.check_ips_codes.label }}</label>
+                        </div>
+                        <div class="form-check">
+                            {{ form.allow_any_extensions(class="form-check-input") }}
+                            <label class="form-check-label" for="allow_any_extensions">{{ form.allow_any_extensions.label }}</label>
+                        </div>
+                        <div class="form-check">
+                            {{ form.tx_routing(class="form-check-input") }}
+                            <label class="form-check-label" for="tx_routing">{{ form.tx_routing.label }}</label>
+                        </div>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label for="{{ form.sample_input.id }}" class="form-label">Sample FHIR Resource/Bundle (JSON)</label>
-                    {{ form.sample_input(class="form-control", rows=10, placeholder="Paste your FHIR JSON here...") }}
-                    {% for error in form.sample_input.errors %}
-                        <div class="text-danger">{{ error }}</div>
-                    {% endfor %}
+
+                <hr class="my-4">
+
+                <h5>Other Settings</h5>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="profiles" class="form-label">{{ form.profiles.label }}</label>
+                        {{ form.profiles(class="form-control") }}
+                        <small class="form-text text-muted">Comma-separated URLs, e.g., url1,url2</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="extensions" class="form-label">{{ form.extensions.label }}</label>
+                        {{ form.extensions(class="form-control") }}
+                        <small class="form-text text-muted">Comma-separated URLs, e.g., url1,url2</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="terminology_server" class="form-label">{{ form.terminology_server.label }}</label>
+                        {{ form.terminology_server(class="form-control") }}
+                        <small class="form-text text-muted">e.g., http://tx.fhir.org</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="snomed_ct_version" class="form-label">{{ form.snomed_ct_version.label }}</label>
+                        {{ form.snomed_ct_version(class="form-select") }}
+                        <small class="form-text text-muted">Select a SNOMED CT edition.</small>
+                    </div>
                 </div>
-                <div class="d-flex justify-content-between">
-                    <button type="button" class="btn btn-primary" id="validateButton">Validate</button>
-                    <button type="button" class="btn btn-secondary d-none" id="clearResultsButton">Clear Results</button>
+
+                <div class="mt-4 text-center">
+                    <button type="submit" id="validateButton" class="btn btn-primary btn-lg">
+                        Validate Resource
+                    </button>
+                    <button type="button" id="clearResultsButton" class="btn btn-secondary btn-lg d-none">
+                        Clear Results
+                    </button>
                 </div>
             </form>
         </div>
     </div>
-
-    <div class="card mt-4" id="validationResult" style="display: none;">
-        <div class="card-header">Validation Report</div>
+    
+    <div id="validationResult" class="card mt-4" style="display: none;">
+        <div class="card-header">Validation Results</div>
         <div class="card-body" id="validationContent">
-            </div>
+            <!-- Results will be displayed here -->
+        </div>
     </div>
 </div>
 
@@ -94,6 +171,7 @@
     const spinnerOverlay = document.getElementById('spinner-overlay');
     const spinnerMessage = document.getElementById('spinner-message');
     const spinnerContainer = document.getElementById('spinner-animation');
+    const perPage = 10;
     
     // Function to load the Lottie animation based on theme
     function loadLottieAnimation(theme) {
@@ -136,17 +214,18 @@
 
     // --- Frontend logic starts here
     document.addEventListener('DOMContentLoaded', function() {
-        const packageSelect = document.getElementById('packageSelect');
-        const packageNameInput = document.getElementById('{{ form.package_name.id }}');
-        const versionInput = document.getElementById('{{ form.version.id }}');
+        const form = document.getElementById('validationForm');
         const validateButton = document.getElementById('validateButton');
         const clearResultsButton = document.getElementById('clearResultsButton');
-        const sampleInput = document.getElementById('{{ form.sample_input.id }}');
         const validationResult = document.getElementById('validationResult');
         const validationContent = document.getElementById('validationContent');
         const csrfToken = document.querySelector('input[name="csrf_token"]').value;
-        const perPage = 10;
-
+        const packageSelect = document.getElementById('packageSelect');
+        const packageNameInput = document.getElementById('{{ form.package_name.id }}');
+        const versionInput = document.getElementById('{{ form.version.id }}');
+        const fhirResourceInput = document.getElementById('fhir_resource');
+        
+        // Function to update package fields when a package is selected from the dropdown
         function updatePackageFields(select) {
             const value = select.value;
             if (!packageNameInput || !versionInput) return;
@@ -164,38 +243,8 @@
                 versionInput.value = '';
             }
         }
-
-        if (packageNameInput.value && versionInput.value) {
-            const currentValue = `${packageNameInput.value}#${versionInput.value}`;
-            const optionExists = Array.from(packageSelect.options).some(opt => opt.value === currentValue);
-            if (optionExists) {
-                packageSelect.value = currentValue;
-            }
-        }
-
-        if (packageSelect) {
-            packageSelect.addEventListener('change', function() {
-                updatePackageFields(this);
-            });
-        }
-
-        if (sampleInput) {
-            sampleInput.addEventListener('input', function() {
-                try {
-                    if (this.value.trim()) {
-                        JSON.parse(this.value);
-                        this.classList.remove('is-invalid');
-                        this.classList.add('is-valid');
-                    } else {
-                        this.classList.remove('is-valid', 'is-invalid');
-                    }
-                } catch (e) {
-                    this.classList.remove('is-valid');
-                    this.classList.add('is-invalid');
-                }
-            });
-        }
-
+        
+        // Sanitize text to prevent XSS
         function sanitizeText(text) {
             const div = document.createElement('div');
             div.textContent = text;
@@ -226,7 +275,7 @@
                 li.innerHTML = `
                     <div class="alert alert-${isWarnings ? 'warning' : 'danger'}">
                         ${sanitizeText(typeof item === 'string' ? item : item.message || item.issue)}
-                        ${isWarnings && item.includes('Must Support') ? ' <i class="bi bi-info-circle" title="This element is marked as Must Support in the profile."></i>' : ''}
+                        ${isWarnings && (item.issue && item.issue.includes('Must Support')) ? ' <i class="bi bi-info-circle" title="This element is marked as Must Support in the profile."></i>' : ''}
                     </div>
                 `;
                 ul.appendChild(li);
@@ -246,7 +295,7 @@
                     li.innerHTML = `
                         <div class="alert alert-${isWarnings ? 'warning' : 'danger'}">
                             ${sanitizeText(typeof item === 'string' ? item : item.message || item.issue)}
-                            ${isWarnings && item.includes('Must Support') ? ' <i class="bi bi-info-circle" title="This element is marked as Must Support in the profile."></i>' : ''}
+                            ${isWarnings && (item.issue && item.issue.includes('Must Support')) ? ' <i class="bi bi-info-circle" title="This element is marked as Must Support in the profile."></i>' : ''}
                         </div>
                     `;
                     remainingUl.appendChild(li);
@@ -275,7 +324,7 @@
             clearResultsButton.classList.remove('d-none');
 
             if (data.file_paths) {
-                // Fix: Extract just the filename to construct the download URL
+                // Use the paths returned from the server to create download links
                 const jsonFileName = data.file_paths.json.split('/').pop();
                 const htmlFileName = data.file_paths.html.split('/').pop();
                 const downloadDiv = document.createElement('div');
@@ -364,7 +413,7 @@
                 new bootstrap.Tooltip(el);
             });
         }
-
+        
         function checkValidationStatus(taskId) {
             fetch(`/api/check-validation-status/${taskId}`)
                 .then(response => {
@@ -398,10 +447,11 @@
                 });
         }
         
-        function runBlockingValidation() {
-            const packageName = packageNameInput.value;
-            const version = versionInput.value;
-            const sampleData = sampleInput.value.trim();
+        function runBlockingValidation(e) {
+            e.preventDefault(); // This is the crucial line to prevent default form submission
+            const packageName = document.getElementById('{{ form.package_name.id }}').value;
+            const version = document.getElementById('{{ form.version.id }}').value;
+            const sampleData = document.getElementById('fhir_resource').value.trim();
             const csrfToken = document.querySelector('input[name="csrf_token"]').value;
 
             if (!packageName || !version) {
@@ -412,31 +462,40 @@
 
             if (!sampleData) {
                 validationResult.style.display = 'block';
-                validationContent.innerHTML = '<div class="alert alert-danger">Please provide FHIR sample JSON.</div>';
+                validationContent.innerHTML = '<div class="alert alert-danger">Please provide FHIR sample JSON or XML.</div>';
                 return;
             }
-
-            try {
-                JSON.parse(sampleData);
-            } catch (e) {
-                validationResult.style.display = 'block';
-                validationContent.innerHTML = '<div class="alert alert-danger">Invalid JSON: ' + sanitizeText(e.message) + '</div>';
-                return;
-            }
-
+            
             toggleSpinner(true, "Running FHIR Validator (This may take up to 5 minutes on the first run).");
             
-            fetch('/api/validate-sample', {
+            // Collect all form data including the new fields
+            const data = {
+                package_name: packageName,
+                version: version,
+                fhir_resource: sampleData,
+                fhir_version: document.getElementById('fhir_version').value,
+                do_native: document.getElementById('do_native').checked,
+                hint_about_must_support: document.getElementById('hint_about_must_support').checked,
+                assume_valid_rest_references: document.getElementById('assume_valid_rest_references').checked,
+                no_extensible_binding_warnings: document.getElementById('no_extensible_binding_warnings').checked,
+                show_times: document.getElementById('show_times').checked,
+                allow_example_urls: document.getElementById('allow_example_urls').checked,
+                check_ips_codes: document.getElementById('check_ips_codes').checked,
+                allow_any_extensions: document.getElementById('allow_any_extensions').checked,
+                tx_routing: document.getElementById('tx_routing').checked,
+                snomed_ct_version: document.getElementById('snomed_ct_version').value,
+                profiles: document.getElementById('profiles').value,
+                extensions: document.getElementById('extensions').value,
+                terminology_server: document.getElementById('terminology_server').value
+            };
+
+            fetch('/api/validate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': csrfToken
                 },
-                body: JSON.stringify({
-                    package_name: packageName,
-                    version: version,
-                    sample_data: sampleData
-                })
+                body: JSON.stringify(data)
             })
             .then(response => {
                 if (response.status === 202) {
@@ -462,9 +521,9 @@
                 toggleSpinner(false);
                 console.error('Validation failed:', error);
                 validationResult.style.display = 'block';
-                validationContent.innerHTML = `<div class="alert alert-danger">An unexpected error occurred: ${sanitizeText(error.message)}</div>`;
+                validationContent.innerHTML = `<div class="alert alert-danger">An unexpected error occurred during validation: ${sanitizeText(error.message)}</div>`;
             });
-        }
+        };
         
         clearResultsButton.addEventListener('click', function() {
             fetch('/api/clear-validation-results', {
@@ -487,9 +546,40 @@
             });
         });
 
+        if (packageSelect) {
+            packageSelect.addEventListener('change', function() {
+                updatePackageFields(this);
+            });
+        }
+        
         if (validateButton) {
-            validateButton.addEventListener('click', function() {
-                runBlockingValidation();
+            validateButton.addEventListener('click', function(e) {
+                runBlockingValidation(e);
+            });
+        }
+        
+        if (packageNameInput.value && versionInput.value) {
+            const currentValue = `${packageNameInput.value}#${versionInput.value}`;
+            const optionExists = Array.from(packageSelect.options).some(opt => opt.value === currentValue);
+            if (optionExists) {
+                packageSelect.value = currentValue;
+            }
+        }
+
+        if (fhirResourceInput) {
+            fhirResourceInput.addEventListener('input', function() {
+                try {
+                    if (this.value.trim()) {
+                        JSON.parse(this.value);
+                        this.classList.remove('is-invalid');
+                        this.classList.add('is-valid');
+                    } else {
+                        this.classList.remove('is-valid', 'is-invalid');
+                    }
+                } catch (e) {
+                    this.classList.remove('is-valid');
+                    this.classList.add('is-invalid');
+                }
             });
         }
     });
