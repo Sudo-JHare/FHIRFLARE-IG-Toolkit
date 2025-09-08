@@ -21,7 +21,7 @@
                     <label class="form-label">FHIR Server</label>
                     <div class="input-group">
                         <button type="button" class="btn btn-outline-primary" id="toggleServer">
-                            <span id="toggleLabel">Use Local HAPI</span>
+                            <span id="toggleLabel">Use Local Server</span>
                         </button>
                         <input type="text" class="form-control" id="fhirServerUrl" name="fhir_server_url" placeholder="e.g., https://hapi.fhir.org/baseR4" style="display: none;" aria-describedby="fhirServerHelp">
                     </div>
@@ -126,7 +126,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const authSection = document.getElementById('authSection');
     const authTypeSelect = document.getElementById('authType');
     const authInputsGroup = document.getElementById('authInputsGroup');
-    const bearerTokenInput = document.getElementById('bearerToken');
+    const bearerTokenInput = document.getElementById('bearerTokenInput');
     const basicAuthInputs = document.getElementById('basicAuthInputs');
     const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
@@ -212,7 +212,7 @@ document.addEventListener('DOMContentLoaded', function() {
             toggleServerButton.style.pointerEvents = 'auto';
             toggleServerButton.removeAttribute('aria-disabled');
             toggleServerButton.title = "Toggle between Local HAPI and Custom URL";
-            toggleLabel.textContent = useLocalHapi ? 'Using Local HAPI' : 'Using Custom URL';
+            toggleLabel.textContent = useLocalHapi ? 'Using Local Server' : 'Using Custom URL';
             fhirServerUrlInput.style.display = useLocalHapi ? 'none' : 'block';
             fhirServerUrlInput.placeholder = "e.g., https://hapi.fhir.org/baseR4";
             fhirServerUrlInput.required = !useLocalHapi;
@@ -244,7 +244,8 @@ document.addEventListener('DOMContentLoaded', function() {
             fhirServerUrlInput.value = '';
         }
         updateServerToggleUI();
-        console.log(`Server toggled: Now using ${useLocalHapi ? 'Local HAPI' : 'Custom URL'}`);
+        updateAuthInputsUI();
+        console.log(`Server toggled: Now using ${useLocalHapi ? 'Local Server' : 'Custom URL'}`);
     }
 
     function updateRequestBodyVisibility() {
@@ -295,7 +296,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const customUrl = fhirServerUrlInput.value.trim();
         let body = undefined;
         const authType = authTypeSelect ? authTypeSelect.value : 'none';
-        const bearerToken = bearerTokenInput ? bearerTokenInput.value.trim() : '';
+        const bearerToken = document.getElementById('bearerToken').value.trim();
         const username = usernameInput ? usernameInput.value.trim() : '';
         const password = passwordInput ? passwordInput.value : '';
 
@@ -334,7 +335,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!useLocalHapi) {
             if (authType === 'bearer' && !bearerToken) {
                 alert('Please enter a Bearer Token.');
-                bearerTokenInput.classList.add('is-invalid');
+                document.getElementById('bearerToken').classList.add('is-invalid');
                 sendButton.disabled = false;
                 sendButton.textContent = 'Send Request';
                 return;
@@ -453,7 +454,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('Fetch error:', error);
             responseCard.style.display = 'block';
-            responseStatus.textContent = `Network Error`;
+            responseStatus.textContent = 'Network Error';
             responseStatus.className = 'badge bg-danger';
             responseHeaders.textContent = 'N/A';
             let errorDetail = `Error: ${error.message}\n\n`;

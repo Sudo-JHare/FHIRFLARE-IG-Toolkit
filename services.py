@@ -7,7 +7,8 @@ import logging
 import shutil
 import sqlite3
 import feedparser
-from flask import current_app, Blueprint, request, jsonify
+from flask import current_app, Blueprint, request, jsonify, Response
+from requests.exceptions import RequestException
 from fhirpathpy import evaluate
 from collections import defaultdict, deque
 from pathlib import Path
@@ -17,11 +18,24 @@ import datetime
 import subprocess
 import tempfile
 import zipfile
+import threading
+from queue import Queue, Empty
 import xml.etree.ElementTree as ET
+import yaml
+import time
+import uuid
 from flasgger import swag_from # Import swag_from here
 
 # Define Blueprint
 services_bp = Blueprint('services', __name__)
+
+# A thread-safe queue to hold logs
+log_queue = Queue()
+
+# Define the path to the validator CLI JAR
+JAVA_VALIDATOR_PATH = os.environ.get('JAVA_VALIDATOR_PATH', '/app/validator_cli/validator_cli.jar')
+JAVA_COMMAND = os.environ.get('JAVA_COMMAND', 'java')
+JAVA_TEMP_DIR = os.environ.get('JAVA_TEMP_DIR', '/tmp/java_temp')
 
 # Configure logging
 if __name__ == '__main__':
@@ -183,6 +197,203 @@ def safe_parse_version(v_str):
          # Catch any other unexpected parsing errors
          logger.error(f"Unexpected error in safe_parse_version for '{v_str}': {e}")
          return pkg_version.parse("0.0.0a0") # Fallback
+
+# --- New Function to run the FHIR Validator CLI ---
+def run_validator_cli(resource_text, fhir_version, igs, profiles, extensions, terminology_server, flags, snomed_ct_version, app_config):
+    """
+    Constructs and runs the Java FHIR Validator CLI command.
+
+    Args:
+        resource_text (str): The FHIR resource/bundle as a string.
+        fhir_version (str): The FHIR version to validate against.
+        igs (list): List of selected IG canonical URLs.
+        profiles (str): Comma-separated list of profile URLs.
+        extensions (str): Comma-separated list of extension URLs.
+        terminology_server (str): The URL of the terminology server.
+        flags (dict): Dictionary of boolean flags for validation.
+        snomed_ct_version (str): The SNOMED CT version to use.
+        app_config (dict): The Flask application configuration.
+
+    Returns:
+        dict: A dictionary containing the validation output and status.
+    """
+    temp_dir = tempfile.mkdtemp(dir=app_config['VALIDATION_LOG_DIR'])
+    
+    # Store the temp directory in the app config for the download endpoint to find it.
+    app_config['VALIDATION_TEMP_DIR'] = temp_dir
+    
+    temp_resource_path = os.path.join(temp_dir, f'resource_{uuid.uuid4()}.json')
+    try:
+        with open(temp_resource_path, 'w', encoding='utf-8') as f:
+            f.write(resource_text)
+    except Exception as e:
+        shutil.rmtree(temp_dir)
+        return {'status': 'error', 'message': f'Failed to write temporary resource file: {e}'}
+
+    output_json_path = os.path.join(temp_dir, 'validation-report.json')
+    output_html_path = os.path.join(temp_dir, 'validation-report.html')
+    
+    command = [
+        'java',
+        '-jar', os.environ.get('JAVA_VALIDATOR_PATH', '/app/validator_cli/validator_cli.jar'),
+        temp_resource_path,
+        '-version', fhir_version,
+        '-output', output_json_path,
+        '-html-output', output_html_path,
+    ]
+
+    # Add flags
+    if flags.get('doNative'):
+        command.append('-do-native')
+    if flags.get('hintAboutMustSupport'):
+        command.append('-hint-about-must-support')
+    if flags.get('assumeValidRestReferences'):
+        command.append('-assume-valid-rest-references')
+    if flags.get('noExtensibleBindingWarnings'):
+        command.append('-no-extensible-binding-warnings')
+    if flags.get('showTimes'):
+        command.append('-show-times')
+    if flags.get('allowExampleUrls'):
+        command.append('-allow-example-urls')
+    if flags.get('checkIpsCodes'):
+        command.append('-check-ips-codes')
+    if flags.get('allowAnyExtensions'):
+        command.append('-allow-any-extensions')
+    if flags.get('txRouting'):
+        command.append('-tx-routing')
+    
+    # Add other options
+    if igs:
+        for ig in igs:
+            command.extend(['-ig', ig])
+    if profiles:
+        command.extend(['-profile', profiles])
+    if extensions:
+        command.extend(['-extension', extensions])
+    if terminology_server:
+        command.extend(['-tx', terminology_server])
+    if snomed_ct_version:
+        command.extend(['-sct', snomed_ct_version])
+
+    logger.info(f"Running validator with command: {' '.join(command)}")
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=300,
+        )
+        
+        stdout = result.stdout
+        stderr = result.stderr
+        
+        logger.debug(f"Validator stdout:\n{stdout}")
+        logger.debug(f"Validator stderr:\n{stderr}")
+
+        # Check for errors in the stdout and stderr
+        if result.returncode != 0 and not os.path.exists(output_json_path):
+            return_dict = {
+                'status': 'error',
+                'output': stderr or "Validation process failed with an unknown error.",
+                'file_paths': {},
+                'errors': [stderr or "Validation process failed with an unknown error."],
+                'warnings': [],
+                'summary': {'error_count': 1, 'warning_count': 0},
+                'results': {}
+            }
+            return return_dict
+        
+        # Now, try to read the JSON file produced by the validator
+        if os.path.exists(output_json_path):
+            with open(output_json_path, 'r', encoding='utf-8') as f:
+                json_report = json.load(f)
+            
+            # Process the JSON report to get a structured summary
+            error_count = 0
+            warning_count = 0
+            errors_list = []
+            warnings_list = []
+            detailed_results = {}
+            is_valid = True
+
+            for issue in json_report.get('issue', []):
+                severity = issue.get('severity')
+                diagnostics = issue.get('diagnostics') or issue.get('details', {}).get('text') or 'No details provided.'
+                resource_expression = issue.get('expression', ['unknown'])[0]
+                
+                # Determine the resource ID and type from the expression, e.g., "AllergyIntolerance" or "AllergyIntolerance[0].extension[0]"
+                resource_id = resource_expression.split('[')[0].split('.')[0]
+                
+                if resource_id not in detailed_results:
+                    detailed_results[resource_id] = {'valid': True, 'details': []}
+                
+                detail = {
+                    'issue': diagnostics,
+                    'severity': severity,
+                    'description': issue.get('details', {}).get('text', diagnostics)
+                }
+                detailed_results[resource_id]['details'].append(detail)
+                
+                if severity == 'error':
+                    error_count += 1
+                    errors_list.append(diagnostics)
+                    is_valid = False
+                    detailed_results[resource_id]['valid'] = False
+                elif severity == 'warning':
+                    warning_count += 1
+                    warnings_list.append(diagnostics)
+
+            # Determine the overall status
+            status = 'success'
+            if error_count > 0:
+                status = 'error'
+            elif warning_count > 0:
+                status = 'warning'
+
+            # Build the final return dictionary
+            return_dict = {
+                'status': status,
+                'valid': is_valid,
+                'output': stdout,
+                'file_paths': {
+                    'json': output_json_path,
+                    'html': output_html_path
+                },
+                'errors': errors_list,
+                'warnings': warnings_list,
+                'summary': {
+                    'error_count': error_count,
+                    'warning_count': warning_count
+                },
+                'results': detailed_results
+            }
+            return return_dict
+        else:
+            # Fallback if validator completed but didn't produce a file
+            return_dict = {
+                'status': 'error',
+                'valid': False,
+                'output': stdout,
+                'file_paths': {},
+                'errors': ["Validator failed to produce the expected output files."],
+                'warnings': [],
+                'summary': {'error_count': 1, 'warning_count': 0},
+                'results': {}
+            }
+            return return_dict
+
+    except FileNotFoundError:
+        return {'status': 'error', 'message': 'Java command or validator JAR not found. Please check paths.'}
+    except subprocess.TimeoutExpired:
+        return {'status': 'error', 'message': 'Validation timed out.'}
+    except Exception as e:
+        return {'status': 'error', 'message': f'An unexpected error occurred during validation: {e}'}
+    finally:
+        # NOTE: We no longer delete the temporary directory here.
+        # It is the responsibility of the `clear-validation-results` endpoint.
+        pass
 
 # --- MODIFIED FUNCTION with Enhanced Logging ---
 def get_additional_registries():
@@ -1088,105 +1299,229 @@ def cache_structure(package_name, package_version, resource_type, view, structur
         logger.error(f"Error caching structure: {e}", exc_info=True)
 
 
-#----OLD CODE HERE
-# def find_and_extract_sd(tgz_path, resource_identifier, profile_url=None, include_narrative=False, raw=False):
-#     """Helper to find and extract StructureDefinition json from a tgz path, prioritizing profile match."""
-#     sd_data = None
-#     found_path = None
-#     if not tgz_path or not os.path.exists(tgz_path):
-#         logger.error(f"File not found in find_and_extract_sd: {tgz_path}")
-#         return None, None
-#     try:
-#         with tarfile.open(tgz_path, "r:gz") as tar:
-#             logger.debug(f"Searching for SD matching '{resource_identifier}' with profile '{profile_url}' in {os.path.basename(tgz_path)}")
-#             potential_matches = []
-#             for member in tar:
-#                 if not (member.isfile() and member.name.startswith('package/') and member.name.lower().endswith('.json')):
-#                     continue
-#                 if os.path.basename(member.name).lower() in ['package.json', '.index.json', 'validation-summary.json', 'validation-oo.json']:
-#                     continue
-#                 fileobj = None
-#                 try:
-#                     fileobj = tar.extractfile(member)
-#                     if fileobj:
-#                         content_bytes = fileobj.read()
-#                         content_string = content_bytes.decode('utf-8-sig')
-#                         data = json.loads(content_string)
-#                         if isinstance(data, dict) and data.get('resourceType') == 'StructureDefinition':
-#                             sd_id = data.get('id')
-#                             sd_name = data.get('name')
-#                             sd_type = data.get('type')
-#                             sd_url = data.get('url')
-#                             sd_filename_base = os.path.splitext(os.path.basename(member.name))[0]
-#                             sd_filename_lower = sd_filename_base.lower()
-#                             resource_identifier_lower = resource_identifier.lower() if resource_identifier else None
-#                             match_score = 0
-#                             if profile_url and sd_url == profile_url:
-#                                 match_score = 5
-#                                 sd_data = remove_narrative(data, include_narrative)
-#                                 found_path = member.name
-#                                 logger.info(f"Found definitive SD matching profile '{profile_url}' at path: {found_path}")
-#                                 break
-#                             elif resource_identifier_lower:
-#                                 if sd_id and resource_identifier_lower == sd_id.lower():
-#                                     match_score = 4
-#                                 elif sd_name and resource_identifier_lower == sd_name.lower():
-#                                     match_score = 4
-#                                 elif sd_filename_lower == f"structuredefinition-{resource_identifier_lower}":
-#                                     match_score = 3
-#                                 elif sd_type and resource_identifier_lower == sd_type.lower() and not re.search(r'[-.]', resource_identifier):
-#                                     match_score = 2
-#                                 elif resource_identifier_lower in sd_filename_lower:
-#                                     match_score = 1
-#                                 elif sd_url and resource_identifier_lower in sd_url.lower():
-#                                     match_score = 1
-#                             if match_score > 0:
-#                                 potential_matches.append((match_score, remove_narrative(data, include_narrative), member.name))
-#                                 if match_score >= 3:
-#                                     sd_data = remove_narrative(data, include_narrative)
-#                                     found_path = member.name
-#                                     break
-#                 except json.JSONDecodeError as e:
-#                     logger.debug(f"Could not parse JSON in {member.name}, skipping: {e}")
-#                 except UnicodeDecodeError as e:
-#                     logger.warning(f"Could not decode UTF-8 in {member.name}, skipping: {e}")
-#                 except tarfile.TarError as e:
-#                     logger.warning(f"Tar error reading member {member.name}, skipping: {e}")
-#                 except Exception as e:
-#                     logger.warning(f"Could not read/parse potential SD {member.name}, skipping: {e}")
-#                 finally:
-#                     if fileobj:
-#                         fileobj.close()
-#             if not sd_data and potential_matches:
-#                 potential_matches.sort(key=lambda x: x[0], reverse=True)
-#                 best_match = potential_matches[0]
-#                 sd_data = best_match[1]
-#                 found_path = best_match[2]
-#                 logger.info(f"Selected best match for '{resource_identifier}' from potential matches (Score: {best_match[0]}): {found_path}")
-#             if sd_data is None:
-#                 logger.info(f"SD matching identifier '{resource_identifier}' or profile '{profile_url}' not found within archive {os.path.basename(tgz_path)}")
-#             elif raw:
-#                 # Return the full, unprocessed StructureDefinition JSON
-#                 with tarfile.open(tgz_path, "r:gz") as tar:
-#                     fileobj = tar.extractfile(found_path)
-#                     content_bytes = fileobj.read()
-#                     content_string = content_bytes.decode('utf-8-sig')
-#                     raw_data = json.loads(content_string)
-#                     return remove_narrative(raw_data, include_narrative), found_path
-#     except tarfile.ReadError as e:
-#         logger.error(f"Tar ReadError reading {tgz_path}: {e}")
-#         return None, None
-#     except tarfile.TarError as e:
-#         logger.error(f"TarError reading {tgz_path} in find_and_extract_sd: {e}")
-#         raise
-#     except FileNotFoundError:
-#         logger.error(f"FileNotFoundError reading {tgz_path} in find_and_extract_sd.")
-#         raise
-#     except Exception as e:
-#         logger.error(f"Unexpected error in find_and_extract_sd for {tgz_path}: {e}", exc_info=True)
-#         raise
-#     return sd_data, found_path
-#--- OLD 
+# In-memory dictionary to store validation results, accessible by task_id
+# The value will be a dictionary with {'status': 'pending'/'complete', 'result': ...}
+validation_results_cache = {}
+# Thread lock to safely manage access to the cache
+cache_lock = threading.Lock()
+
+def validate_in_thread(app_context, task_id, fhir_resource_text, fhir_version, igs, profiles, extensions, terminology_server, flags, snomed_ct_version):
+    """
+    Wrapper function to run the blocking validator in a separate thread.
+    It acquires an app context and then calls the main validation logic.
+    """
+    with app_context:
+        logger.info(f"Starting validation thread for task ID: {task_id}")
+        
+        # Call the core blocking validation function, passing all arguments
+        result = run_validator_cli(fhir_resource_text, fhir_version, igs, profiles, extensions, terminology_server, flags, snomed_ct_version, current_app.config)
+        
+        # Safely update the shared cache with the final result
+        with cache_lock:
+            validation_results_cache[task_id] = {"status": "complete", "result": result}
+        
+        logger.info(f"Validation thread for task ID: {task_id} completed.")
+
+def run_java_validator(package_name, version, sample_data):
+    """
+    Validates a FHIR resource or bundle using the official HL7 FHIR Validator.
+    
+    This function performs a series of checks and then executes the Java CLI
+    command to validate a FHIR resource against a specified IG. It is designed
+    to be called from a separate thread to prevent blocking the main application.
+    
+    The function returns a dictionary containing the validation summary, detailed
+    results, and paths to the generated JSON and HTML reports.
+    
+    Args:
+        package_name (str): The name of the FHIR IG package.
+        version (str): The version of the FHIR IG package.
+        sample_data (dict): The FHIR resource or bundle to validate.
+        
+    Returns:
+        dict: A structured validation report.
+    """
+    logger.info(f"Running blocking validation with Java CLI for {package_name}#{version}")
+
+    try:
+        # --- Pre-check 1: Verify Java is available ---
+        try:
+            java_check = subprocess.run([JAVA_COMMAND, '-version'], capture_output=True, text=True, timeout=5)
+            if java_check.returncode != 0:
+                error_msg = f"Java command '{JAVA_COMMAND}' failed. Stderr: {java_check.stderr}"
+                logger.error(error_msg)
+                return {
+                    "valid": False,
+                    "errors": [f"Java runtime not found or failed to execute. Check JAVA_COMMAND environment variable. Error: {java_check.stderr}"],
+                    "warnings": [],
+                    "results": {},
+                    "summary": {"error_count": 1, "warning_count": 0}
+                }
+            logger.info(f"Java version check successful. Stdout: {java_check.stdout.strip()}")
+        except FileNotFoundError:
+            error_msg = f"Java command '{JAVA_COMMAND}' not found. Is it in the system's PATH?"
+            logger.error(error_msg)
+            return {
+                "valid": False,
+                "errors": [error_msg],
+                "warnings": [],
+                "results": {},
+                "summary": {"error_count": 1, "warning_count": 0}
+            }
+        except subprocess.TimeoutExpired:
+            error_msg = f"Java command '{JAVA_COMMAND}' timed out during version check."
+            logger.error(error_msg)
+            return {
+                "valid": False,
+                "errors": [error_msg],
+                "warnings": [],
+                "results": {},
+                "summary": {"error_count": 1, "warning_count": 0}
+            }
+        
+        # --- Pre-check 2: Verify validator JAR exists ---
+        if not os.path.exists(JAVA_VALIDATOR_PATH):
+            return {
+                "valid": False,
+                "errors": [f"HL7 Validator JAR not found at {JAVA_VALIDATOR_PATH}"],
+                "warnings": [],
+                "results": {},
+                "summary": {"error_count": 1, "warning_count": 0}
+            }
+        logger.info(f"Validator JAR found at {JAVA_VALIDATOR_PATH}")
+
+        instance_temp_dir = os.path.join(current_app.instance_path, 'validator_temp')
+        os.makedirs(instance_temp_dir, exist_ok=True)
+        
+        # We now manually create a unique directory for each run to avoid file conflicts,
+        # which will not be automatically cleaned up.
+        temp_dir = tempfile.mkdtemp(dir=instance_temp_dir)
+        # Store the path to the temporary directory in the app config for later cleanup
+        current_app.config['VALIDATION_TEMP_DIR'] = temp_dir
+        logger.info(f"Created new validation directory: {temp_dir}")
+        
+        input_file = os.path.join(temp_dir, 'input.json')
+        output_json_file = os.path.join(temp_dir, 'validation.json')
+        output_html_file = os.path.join(temp_dir, 'validation.html')
+
+        with open(input_file, 'w', encoding='utf-8') as f:
+            json.dump(sample_data, f, indent=2)
+
+        packages_dir = current_app.config['FHIR_PACKAGES_DIR']
+        tgz_filename = construct_tgz_filename(package_name, version)
+        tgz_path = os.path.join(packages_dir, tgz_filename)
+
+        if not os.path.exists(tgz_path):
+            return {
+                "valid": False,
+                "errors": [f"Package file not found locally: {tgz_filename}"],
+                "warnings": [],
+                "results": {},
+                "summary": {"error_count": 1, "warning_count": 0}
+            }
+        
+        # The command now includes the '-verbose' flag for debugging and both output files.
+        cmd = [
+            JAVA_COMMAND,
+            '-jar', JAVA_VALIDATOR_PATH,
+            input_file,
+            '-ig', tgz_path,
+            '-output', output_json_file,
+            '-html-output', output_html_file,
+            '-version', 'r4',
+            '-verbose'
+        ]
+        
+        logger.info(f"Executing command: {' '.join(cmd)}")
+        # Increased timeout to 800 seconds (13.3 minutes) to accommodate long-running tasks
+        process = subprocess.run(cmd, capture_output=True, text=True, timeout=800)
+
+        # NOTE: We now check for file existence FIRST. If the files are there,
+        # we ignore the return code and assume the process succeeded.
+        if not os.path.exists(output_json_file) or not os.path.exists(output_html_file):
+            # If files don't exist, something is genuinely wrong. Fallback to logging the error.
+            logger.error(f"Java validator failed with exit code {process.returncode}. Stderr: {process.stderr}. Stdout: {process.stdout}")
+            return {
+                "valid": False,
+                "errors": [f"Validator failed with exit code {process.returncode}. Stderr: {process.stderr}. Stdout: {process.stdout}"],
+                "warnings": [],
+                "results": {},
+                "summary": {"error_count": 1, "warning_count": 0}
+            }
+
+        # Read the JSON output file to build the report
+        with open(output_json_file, 'r', encoding='utf-8') as f:
+            outcome = json.load(f)
+
+        result = {
+            'valid': True,
+            'errors': [],
+            'warnings': [],
+            'results': {},
+            'summary': {
+                'error_count': 0,
+                'warning_count': 0
+            },
+            'file_paths': {
+                'json': output_json_file,
+                'html': output_html_file
+            }
+        }
+        
+        for issue in outcome.get('issue', []):
+            severity = issue.get('severity')
+            diagnostics = issue.get('diagnostics', issue.get('details', {}).get('text', 'No details provided'))
+            detail = {
+                'issue': diagnostics,
+                'severity': severity,
+                'description': issue.get('details', {}).get('text', diagnostics)
+            }
+
+            resource_location = next((loc for loc in issue.get('location', []) if '/' in loc), None)
+            resource_id = resource_location or sample_data.get('resourceType', 'unknown') + '/' + sample_data.get('id', 'unknown')
+
+            if resource_id not in result['results']:
+                result['results'][resource_id] = {
+                    "valid": True,
+                    "details": [],
+                    "profile": sample_data.get('meta', {}).get('profile', [None])[0]
+                }
+
+            result['results'][resource_id]['details'].append(detail)
+
+            if severity in ['error', 'fatal']:
+                result['valid'] = False
+                result['results'][resource_id]['valid'] = False
+                result['errors'].append(diagnostics)
+                result['summary']['error_count'] += 1
+            elif severity == 'warning':
+                result['warnings'].append(diagnostics)
+                result['summary']['warning_count'] += 1
+
+        if result['summary']['error_count'] > 0:
+            result['valid'] = False
+
+        logger.info("Java validation completed successfully.")
+        return result
+
+    except subprocess.TimeoutExpired as e:
+        logger.error(f"Command timed out after {e.timeout} seconds: {e.cmd}")
+        return {
+            "valid": False,
+            "errors": [f"Validation timed out after {e.timeout} seconds. This can happen if the validator is downloading large packages."],
+            "warnings": [],
+            "results": {},
+            "summary": {"error_count": 1, "warning_count": 0}
+        }
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during validation: {str(e)}", exc_info=True)
+        return {
+            "valid": False,
+            "errors": [f"An unexpected error occurred: {str(e)}"],
+            "warnings": [],
+            "results": {},
+            "summary": {"error_count": 1, "warning_count": 0}
+        }
 
 # --- UPDATED: find_and_extract_sd function ---
 def find_and_extract_sd(tgz_path, resource_identifier, profile_url=None, include_narrative=False, raw=False):
@@ -2213,14 +2548,12 @@ def _legacy_validate_resource_against_profile(package_name, version, resource, i
 # -- OLD
 
 
-# --- UPDATED: validate_resource_against_profile function ---
 def validate_resource_against_profile(package_name, version, resource, include_dependencies=True):
     """
-    Validates a FHIR resource against a StructureDefinition in the specified package.
+    Validates a FHIR resource against a profile on the configured HAPI FHIR server.
     
-    This version correctly handles the absence of a `meta.profile` by falling back
-    to the base resource definition. It also sanitizes profile URLs to avoid
-    version mismatch errors.
+    This function now exclusively uses the HAPI FHIR validator and removes all local
+    StructureDefinition lookup and FHIRPath validation logic.
     """
     result = {
         'valid': True,
@@ -2232,181 +2565,96 @@ def validate_resource_against_profile(package_name, version, resource, include_d
         'profile': resource.get('meta', {}).get('profile', [None])[0]
     }
     
-    download_dir = _get_download_dir()
-    if not download_dir:
-        result['valid'] = False
-        result['errors'].append("Could not access download directory")
-        result['details'].append({
-            'issue': "Could not access download directory",
-            'severity': 'error',
-            'description': "The server could not locate the directory where FHIR packages are stored."
-        })
-        logger.error("Validation failed: Could not access download directory")
-        return result
-
-    # --- Work Item 3 & 2: Get profile URL or fallback to resourceType ---
     profile_url = result['profile']
-    resource_identifier = resource.get('resourceType')
+    resource_type = result['resource_type']
     
-    if profile_url:
-        # Sanitize profile URL to remove version
-        clean_profile_url = profile_url.split('|')[0]
-        logger.debug(f"Using provided profile: {profile_url}. Cleaned to: {clean_profile_url}")
-        resource_identifier = profile_url
-    else:
-        # No profile provided, fallback to resource type
-        logger.debug(f"No profile in resource, using base type as identifier: {resource_identifier}")
-        clean_profile_url = None
-        
-    tgz_path = os.path.join(download_dir, construct_tgz_filename(package_name, version))
-    logger.debug(f"Checking for package file: {tgz_path}")
-
-    # Find StructureDefinition
-    sd_data, sd_path = find_and_extract_sd(tgz_path, resource_identifier, clean_profile_url)
-    
-    if not sd_data and include_dependencies:
-        logger.debug(f"SD not found in {package_name}#{version}. Checking dependencies.")
-        try:
-            with tarfile.open(tgz_path, "r:gz") as tar:
-                package_json_member = None
-                for member in tar:
-                    if member.name == 'package/package.json':
-                        package_json_member = member
-                        break
-                if package_json_member:
-                    fileobj = tar.extractfile(package_json_member)
-                    pkg_data = json.load(fileobj)
-                    fileobj.close()
-                    dependencies = pkg_data.get('dependencies', {})
-                    logger.debug(f"Found dependencies: {dependencies}")
-                    for dep_name, dep_version in dependencies.items():
-                        dep_tgz = os.path.join(download_dir, construct_tgz_filename(dep_name, dep_version))
-                        if os.path.exists(dep_tgz):
-                            logger.debug(f"Searching SD in dependency {dep_name}#{dep_version}")
-                            sd_data, sd_path = find_and_extract_sd(dep_tgz, resource_identifier, clean_profile_url)
-                            if sd_data:
-                                logger.info(f"Found SD in dependency {dep_name}#{dep_version} at {sd_path}")
-                                break
-                        else:
-                            logger.warning(f"Dependency package {dep_name}#{dep_version} not found at {dep_tgz}")
-                else:
-                    logger.warning(f"No package.json found in {tgz_path}")
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse package.json in {tgz_path}: {e}")
-        except tarfile.TarError as e:
-            logger.error(f"Failed to read {tgz_path} while checking dependencies: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error while checking dependencies in {tgz_path}: {e}")
-
-    if not sd_data:
+    if not profile_url:
         result['valid'] = False
-        result['errors'].append(f"No StructureDefinition found for {resource_identifier} with profile {clean_profile_url or 'any'}")
+        result['errors'].append(f"Validation failed: No profile found in resource {resource_type}/{result['resource_id']}.")
         result['details'].append({
-            'issue': f"No StructureDefinition found for {resource_identifier} with profile {clean_profile_url or 'any'}",
+            'issue': "Missing `meta.profile`",
             'severity': 'error',
-            'description': f"The package {package_name}#{version} (and dependencies, if checked) does not contain a matching StructureDefinition."
+            'description': "HAPI validation requires a `meta.profile` element to be present in the resource to identify the correct profile for validation. The resource cannot be validated without it."
         })
-        logger.error(f"Validation failed: No SD for {resource_identifier} in {tgz_path}")
+        logger.error(f"Validation failed: Resource {resource_type}/{result['resource_id']} is missing `meta.profile`.")
         return result
-    logger.debug(f"Found SD at {sd_path}")
 
-    # Validate required elements (min=1)
-    errors = []
-    warnings = set()
-    elements = sd_data.get('snapshot', {}).get('element', [])
-    for element in elements:
-        path = element.get('path')
-        min_val = element.get('min', 0)
-        must_support = element.get('mustSupport', False)
-        definition = element.get('definition', 'No definition provided in StructureDefinition.')
+    try:
+        hapi_base_url = current_app.config['HAPI_FHIR_URL'].rstrip('/')
+        validate_url = f"{hapi_base_url}/{resource_type}/$validate"
+        
+        # We need to send the resource itself and the profile to validate against.
+        # HAPI's $validate operation for a resource instance uses a PUT with a `profile` query parameter.
+        params = {'profile': profile_url}
+        headers = {'Content-Type': 'application/fhir+json', 'Accept': 'application/fhir+json'}
+        
+        # Log the request details for debugging
+        logger.debug(f"Submitting resource {resource_type}/{result['resource_id']} to HAPI validator: {validate_url}?profile={profile_url}")
+        
+        response = requests.put(
+            validate_url,
+            json=resource,
+            headers=headers,
+            params=params,
+            timeout=30 # Increased timeout for potentially complex validation
+        )
+        response.raise_for_status()
+        
+        outcome = response.json()
+        if outcome.get('resourceType') == 'OperationOutcome':
+            for issue in outcome.get('issue', []):
+                severity = issue.get('severity')
+                diagnostics = issue.get('diagnostics', issue.get('details', {}).get('text', 'No details provided'))
+                detail = {
+                    'issue': diagnostics,
+                    'severity': severity,
+                    'description': issue.get('details', {}).get('text', diagnostics)
+                }
+                if severity in ['error', 'fatal']:
+                    result['valid'] = False
+                    result['errors'].append(diagnostics)
+                elif severity == 'warning':
+                    result['warnings'].append(diagnostics)
+                result['details'].append(detail)
+            
+            result['summary'] = {
+                'error_count': len(result['errors']),
+                'warning_count': len(result['warnings'])
+            }
+            logger.info(f"HAPI validation for {resource_type}/{result['resource_id']} completed. Valid: {result['valid']}, Errors: {len(result['errors'])}, Warnings: {len(result['warnings'])}")
+            return result
+        else:
+            # HAPI returned a 200 but the body isn't a valid OperationOutcome
+            error_msg = f"HAPI validator returned an invalid response. Expected OperationOutcome but got {outcome.get('resourceType')}"
+            logger.error(error_msg)
+            result['valid'] = False
+            result['errors'].append(error_msg)
+            return result
+            
+    except requests.exceptions.RequestException as e:
+        error_msg = f"HAPI validation failed due to network/server error: {str(e)}"
+        logger.error(f"Validation failed for {resource_type}/{result['resource_id']}: {error_msg}")
+        result['valid'] = False
+        result['errors'].append(error_msg)
+        result['details'].append({
+            'issue': "HAPI server validation failed.",
+            'severity': 'fatal',
+            'description': error_msg
+        })
+        return result
+    except Exception as e:
+        error_msg = f"An unexpected error occurred during validation: {str(e)}"
+        logger.error(f"Unexpected error in validate_resource_against_profile: {e}", exc_info=True)
+        result['valid'] = False
+        result['errors'].append(error_msg)
+        return result
 
-        # Check required elements
-        if min_val > 0 and not '.' in path[1 + path.find('.'):] if path.find('.') != -1 else True:
-            value = navigate_fhir_path(resource, path)
-            if value is None or (isinstance(value, list) and not any(value)):
-                error_msg = f"{resource.get('resourceType')}/{resource.get('id', 'unknown')}: Required element {path} missing"
-                errors.append(error_msg)
-                result['details'].append({
-                    'issue': error_msg,
-                    'severity': 'error',
-                    'description': f"{definition} This element is mandatory (min={min_val}) per the profile {profile_url or 'unknown'}."
-                })
-                logger.info(f"Validation error: Required element {path} missing")
-
-        # Check must-support elements
-        if must_support and not '.' in path[1 + path.find('.'):] if path.find('.') != -1 else True:
-            if '[x]' in path:
-                base_path = path.replace('[x]', '')
-                found = False
-                for suffix in ['Quantity', 'CodeableConcept', 'String', 'DateTime', 'Period', 'Range']:
-                    test_path = f"{base_path}{suffix}"
-                    value = navigate_fhir_path(resource, test_path)
-                    if value is not None and (not isinstance(value, list) or any(value)):
-                        found = True
-                        break
-                if not found:
-                    warning_msg = f"{resource.get('resourceType')}/{resource.get('id', 'unknown')}: Must Support element {path} missing or empty"
-                    warnings.add(warning_msg)
-                    result['details'].append({
-                        'issue': warning_msg,
-                        'severity': 'warning',
-                        'description': f"{definition} This element is marked as Must Support in AU Core, meaning it should be populated if the data is available (e.g., phone or email for Patient.telecom)."
-                    })
-                    logger.info(f"Validation warning: Must Support element {path} missing or empty")
-            else:
-                value = navigate_fhir_path(resource, path)
-                if value is None or (isinstance(value, list) and not any(value)):
-                    if element.get('min', 0) == 0:
-                        warning_msg = f"{resource.get('resourceType')}/{resource.get('id', 'unknown')}: Must Support element {path} missing or empty"
-                        warnings.add(warning_msg)
-                        result['details'].append({
-                            'issue': warning_msg,
-                            'severity': 'warning',
-                            'description': f"{definition} This element is marked as Must Support in AU Core, meaning it should be populated if the data is available (e.g., phone or email for Patient.telecom)."
-                        })
-                        logger.info(f"Validation warning: Must Support element {path} missing or empty")
-
-        # Handle dataAbsentReason for must-support elements
-        if path.endswith('dataAbsentReason') and must_support:
-            value_x_path = path.replace('dataAbsentReason', 'value[x]')
-            value_found = False
-            for suffix in ['Quantity', 'CodeableConcept', 'String', 'DateTime', 'Period', 'Range']:
-                test_path = path.replace('dataAbsentReason', f'value{suffix}')
-                value = navigate_fhir_path(resource, test_path)
-                if value is not None and (not isinstance(value, list) or any(value)):
-                    value_found = True
-                    break
-            if not value_found:
-                value = navigate_fhir_path(resource, path)
-                if value is None or (isinstance(value, list) and not any(value)):
-                    warning_msg = f"{resource.get('resourceType')}/{resource.get('id', 'unknown')}: Must Support element {path} missing or empty"
-                    warnings.add(warning_msg)
-                    result['details'].append({
-                        'issue': warning_msg,
-                        'severity': 'warning',
-                        'description': f"{definition} This element is marked as Must Support and should be used to indicate why the associated value is absent."
-                    })
-                    logger.info(f"Validation warning: Must Support element {path} missing or empty")
-
-    result['errors'] = errors
-    result['warnings'] = list(warnings)
-    result['valid'] = len(errors) == 0
-    result['summary'] = {
-        'error_count': len(errors),
-        'warning_count': len(warnings)
-    }
-    logger.debug(f"Validation result: valid={result['valid']}, errors={len(result['errors'])}, warnings={len(result['warnings'])}")
-    return result
-
-# --- UPDATED: validate_bundle_against_profile function ---
 def validate_bundle_against_profile(package_name, version, bundle, include_dependencies=True):
     """
-    Validates a FHIR Bundle against profiles in the specified package.
-    
-    This version adds a new two-pass process to correctly resolve `urn:uuid`
-    references within the bundle before flagging them as unresolved.
+    Validates a FHIR Bundle against a profile on the configured HAPI FHIR server.
+    This function is now a passthrough to the single-resource validator for each entry.
     """
-    logger.debug(f"Validating bundle against {package_name}#{version}, include_dependencies={include_dependencies}")
+    logger.debug(f"Validating bundle against HAPI FHIR server.")
     result = {
         'valid': True,
         'errors': [],
@@ -2419,7 +2667,8 @@ def validate_bundle_against_profile(package_name, version, bundle, include_depen
             'profiles_validated': set()
         }
     }
-    if not bundle.get('resourceType') == 'Bundle':
+    
+    if not isinstance(bundle, dict) or bundle.get('resourceType') != 'Bundle':
         result['valid'] = False
         result['errors'].append("Resource is not a Bundle")
         result['details'].append({
@@ -2430,66 +2679,32 @@ def validate_bundle_against_profile(package_name, version, bundle, include_depen
         logger.error("Validation failed: Resource is not a Bundle")
         return result
 
-    # --- Work Item 1: First pass to collect all local references ---
-    local_references = set()
-    for entry in bundle.get('entry', []):
-        fullUrl = entry.get('fullUrl')
-        resource = entry.get('resource')
-        if fullUrl:
-            local_references.add(fullUrl)
-        if resource and resource.get('resourceType') and resource.get('id'):
-            local_references.add(f"{resource['resourceType']}/{resource['id']}")
-    logger.debug(f"Found {len(local_references)} local references in the bundle.")
-    
-    # Track references and resolved references for external check
-    all_references_found = set()
-    
-    # Second pass for validation and reference checking
     for entry in bundle.get('entry', []):
         resource = entry.get('resource')
         if not resource:
             continue
+            
         resource_type = resource.get('resourceType')
         resource_id = resource.get('id', 'unknown')
         result['summary']['resource_count'] += 1
 
-        # Collect references
-        current_refs = []
-        find_references(resource, current_refs)
-        for ref_str in current_refs:
-            if isinstance(ref_str, str):
-                all_references_found.add(ref_str)
-
-        # Validate resource
         validation_result = validate_resource_against_profile(package_name, version, resource, include_dependencies)
         result['results'][f"{resource_type}/{resource_id}"] = validation_result
         result['summary']['profiles_validated'].add(validation_result['profile'] or 'unknown')
 
-        # Aggregate errors and warnings
         if not validation_result['valid']:
             result['valid'] = False
             result['summary']['failed_resources'] += 1
+            
         result['errors'].extend(validation_result['errors'])
         result['warnings'].extend(validation_result['warnings'])
         result['details'].extend(validation_result['details'])
 
-    # --- Work Item 1: Check for unresolved references *after* processing all local resources ---
-    for ref in all_references_found:
-        if ref not in local_references:
-            warning_msg = f"Unresolved reference: {ref}"
-            result['warnings'].append(warning_msg)
-            result['details'].append({
-                'issue': warning_msg,
-                'severity': 'warning',
-                'description': f"The reference {ref} points to a resource not included in the bundle. Ensure the referenced resource is present or resolvable."
-            })
-            logger.info(f"Validation warning: Unresolved reference {ref}")
-
-    # Finalize summary
     result['summary']['profiles_validated'] = list(result['summary']['profiles_validated'])
     result['summary']['error_count'] = len(result['errors'])
     result['summary']['warning_count'] = len(result['warnings'])
     logger.debug(f"Bundle validation result: valid={result['valid']}, errors={result['summary']['error_count']}, warnings={result['summary']['warning_count']}, resources={result['summary']['resource_count']}")
+    
     return result
 
 
@@ -2996,13 +3211,13 @@ def import_package_and_dependencies(initial_name, initial_version, dependency_mo
 @services_bp.route('/validate-sample', methods=['POST'])
 @swag_from({
     'tags': ['Validation'],
-    'summary': 'Validate a FHIR resource or bundle.',
-    'description': 'Validates a given FHIR resource or bundle against profiles defined in a specified FHIR package. Uses HAPI FHIR for validation if a profile is specified, otherwise falls back to local StructureDefinition checks.',
-    'security': [{'ApiKeyAuth': []}], # Assuming API key is desired
+    'summary': 'Starts a validation process for a FHIR resource or bundle.',
+    'description': 'Starts a validation task and immediately returns a task ID for polling. The actual validation is run in a separate thread to prevent timeouts.',
+    'security': [{'ApiKeyAuth': []}],
     'consumes': ['application/json'],
     'parameters': [
         {
-            'name': 'validation_payload', # Changed name
+            'name': 'validation_payload',
             'in': 'body',
             'required': True,
             'schema': {
@@ -3012,122 +3227,91 @@ def import_package_and_dependencies(initial_name, initial_version, dependency_mo
                     'package_name': {'type': 'string', 'example': 'hl7.fhir.us.core'},
                     'version': {'type': 'string', 'example': '6.1.0'},
                     'sample_data': {'type': 'string', 'description': 'A JSON string of the FHIR resource or Bundle to validate.'},
-                    # 'include_dependencies': {'type': 'boolean', 'default': True} # This seems to be a server-side decision now
                 }
             }
         }
     ],
     'responses': {
-        '200': {
-            'description': 'Validation result.',
-            'schema': { # Define the schema of the validation_result dictionary
-                'type': 'object',
-                'properties': {
-                    'valid': {'type': 'boolean'},
-                    'errors': {'type': 'array', 'items': {'type': 'string'}},
-                    'warnings': {'type': 'array', 'items': {'type': 'string'}},
-                    'details': {'type': 'array', 'items': {'type': 'object'}}, # more specific if known
-                    'resource_type': {'type': 'string'},
-                    'resource_id': {'type': 'string'},
-                    'profile': {'type': 'string', 'nullable': True},
-                    'summary': {'type': 'object'}
-                }
-            }
-        },
-        '400': {'description': 'Invalid request (e.g., missing fields, invalid JSON).'},
-        '404': {'description': 'Specified package for validation not found.'},
-        '500': {'description': 'Server error during validation.'}
+        '202': {'description': 'Validation process started successfully, returns a task_id.'},
+        '400': {'description': 'Invalid request (e.g., missing fields, invalid JSON).'}
     }
 })
 def validate_sample():
-    """Validates a FHIR sample against a package profile."""
-    logger.debug("Received validate-sample request")
+    """
+    This is the POST endpoint that starts the validation process in a new thread.
+    """
+    logger.debug("Received validate-sample POST request")
     data = request.get_json(silent=True)
     if not data:
-        logger.error("No JSON data provided or invalid JSON in validate-sample request")
-        return jsonify({
-            'valid': False,
-            'errors': ["No JSON data provided or invalid JSON"],
-            'warnings': [],
-            'results': {}
-        }), 400
+        return jsonify({"status": "error", "message": "Invalid JSON"}), 400
 
     package_name = data.get('package_name')
     version = data.get('version')
-    sample_data = data.get('sample_data')
+    sample_data_str = data.get('sample_data')
 
-    logger.debug(f"Request params: package_name={package_name}, version={version}, sample_data_length={len(sample_data) if sample_data else 0}")
-    if not package_name or not version or not sample_data:
-        logger.error(f"Missing required fields: package_name={package_name}, version={version}, sample_data={'provided' if sample_data else 'missing'}")
-        return jsonify({
-            'valid': False,
-            'errors': ["Missing required fields: package_name, version, or sample_data"],
-            'warnings': [],
-            'results': {}
-        }), 400
-
-    # Verify download directory access
-    download_dir = _get_download_dir()
-    if not download_dir:
-        logger.error("Cannot access download directory")
-        return jsonify({
-            'valid': False,
-            'errors': ["Server configuration error: cannot access package directory"],
-            'warnings': [],
-            'results': {}
-        }), 500
-
-    # Verify package file exists
-    tgz_filename = construct_tgz_filename(package_name, version)
-    tgz_path = os.path.join(download_dir, tgz_filename)
-    logger.debug(f"Checking package file: {tgz_path}")
-    if not os.path.exists(tgz_path):
-        logger.error(f"Package file not found: {tgz_path}")
-        return jsonify({
-            'valid': False,
-            'errors': [f"Package not found: {package_name}#{version}. Please import the package first."],
-            'warnings': [],
-            'results': {}
-        }), 400
+    if not package_name or not version or not sample_data_str:
+        return jsonify({"status": "error", "message": "Missing required fields"}), 400
 
     try:
-        # Parse JSON sample
-        sample = json.loads(sample_data)
-        resource_type = sample.get('resourceType')
-        if not resource_type:
-            logger.error("Sample JSON missing resourceType")
-            return jsonify({
-                'valid': False,
-                'errors': ["Sample JSON missing resourceType"],
-                'warnings': [],
-                'results': {}
-            }), 400
-
-        logger.debug(f"Validating {resource_type} against {package_name}#{version}")
-        # Validate resource or bundle
-        if resource_type == 'Bundle':
-            result = validate_bundle_against_profile(package_name, version, sample)
-        else:
-            result = validate_resource_against_profile(package_name, version, sample)
-
-        logger.info(f"Validation result for {resource_type} against {package_name}#{version}: valid={result['valid']}, errors={len(result['errors'])}, warnings={len(result['warnings'])}")
-        return jsonify(result)
+        sample = json.loads(sample_data_str)
     except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in sample_data: {e}")
-        return jsonify({
-            'valid': False,
-            'errors': [f"Invalid JSON: {str(e)}"],
-            'warnings': [],
-            'results': {}
-        }), 400
-    except Exception as e:
-        logger.error(f"Validation failed: {e}", exc_info=True)
-        return jsonify({
-            'valid': False,
-            'errors': [f"Validation failed: {str(e)}"],
-            'warnings': [],
-            'results': {}
-        }), 500
+        return jsonify({"status": "error", "message": f"Invalid JSON: {str(e)}"}), 400
+    
+    # Generate a unique task ID
+    task_id = str(uuid.uuid4())
+    
+    # Store a pending status in the global cache
+    with cache_lock:
+        validation_results_cache[task_id] = {"status": "pending"}
+
+    # Start the validation process in a new thread
+    app_context = current_app.app_context()
+    thread = threading.Thread(
+        target=validate_in_thread,
+        args=(app_context, task_id, package_name, version, sample),
+        daemon=True
+    )
+    thread.start()
+    
+    logger.info(f"Validation task {task_id} started in background thread.")
+    
+    return jsonify({"status": "accepted", "message": "Validation started", "task_id": task_id}), 202
+
+@services_bp.route('/check-validation-status/<task_id>', methods=['GET'])
+@swag_from({
+    'tags': ['Validation'],
+    'summary': 'Check the status of a validation task.',
+    'description': 'Polls for the result of a validation task by its ID. Returns the full validation report when the task is complete.',
+    'security': [{'ApiKeyAuth': []}],
+    'parameters': [
+        {'name': 'task_id', 'in': 'path', 'type': 'string', 'required': True, 'description': 'The unique ID of the validation task.'}
+    ],
+    'responses': {
+        '200': {'description': 'Returns the full validation report if the task is complete.'},
+        '202': {'description': 'The validation task is still in progress.'},
+        '404': {'description': 'The specified task ID was not found.'}
+    }
+})
+def check_validation_status(task_id):
+    """
+    This GET endpoint is polled by the frontend to check the status of a validation task.
+    """
+    with cache_lock:
+        task_result = validation_results_cache.get(task_id)
+
+    if task_result is None:
+        return jsonify({"status": "error", "message": "Task not found."}), 404
+        
+    if task_result["status"] == "pending":
+        return jsonify({"status": "pending", "message": "Validation is still in progress."}), 202
+
+    # Remove the result from the cache after it has been retrieved to prevent a memory leak
+    with cache_lock:
+        del validation_results_cache[task_id]
+
+    return jsonify({"status": "complete", "result": task_result["result"]}), 200
+
+
 
 def run_gofsh(input_path, output_dir, output_style, log_level, fhir_version=None, fishing_trip=False, dependencies=None, indent_rules=False, meta_profile='only-one', alias_file=None, no_alias=False):
     """Run GoFSH with advanced options and return FSH output and optional comparison report."""
@@ -4928,6 +5112,93 @@ def split_bundles(input_zip_path, output_zip):
             for filename in os.listdir(temp_dir):
                 os.remove(os.path.join(temp_dir, filename))
             os.rmdir(temp_dir)
+
+#--- NEW CODE HERE 25/08/25 added the new section and page to create hapi Yaml for validator.
+
+def parse_and_list_igs(packages_dir):
+    """
+    Parses all downloaded IG packages to create a comprehensive list of IGs and their dependencies.
+    """
+    igs = {}
+    if not os.path.exists(packages_dir):
+        logger.error(f"Packages directory not found: {packages_dir}")
+        return igs
+
+    for filename in os.listdir(packages_dir):
+        if filename.endswith('.tgz'):
+            tgz_path = os.path.join(packages_dir, filename)
+            try:
+                with tarfile.open(tgz_path, "r:gz") as tar:
+                    package_json = tar.extractfile('package/package.json')
+                    if package_json:
+                        pkg_info = json.load(package_json)
+                        name = pkg_info.get('name')
+                        version = pkg_info.get('version')
+                        if name and version:
+                            # Construct the local package URL
+                            package_url = f"file:/app/instance/fhir_packages/{name}-{version}.tgz"
+                            igs[name] = {
+                                'name': name,
+                                'version': version,
+                                'packageUrl': package_url,
+                                'dependencies': pkg_info.get('dependencies', {})
+                            }
+            except Exception as e:
+                logger.error(f"Error reading package.json from {filename}: {e}")
+                continue
+    return igs
+
+def apply_and_validate(package_name, version, sample_data):
+    """
+    Orchestrates the validation process. This function now exclusively calls
+    the `run_java_validator` function, bypassing HAPI.
+    """
+    logger.info("Using Java validator for validation.")
+    
+    # Delegate the entire validation process to the new function
+    return run_java_validator(package_name, version, sample_data)
+
+
+
+def generate_ig_yaml(selected_ig_names, all_loaded_igs):
+    """
+    Generates a YAML configuration block for the selected IGs and their dependencies.
+    """
+    yaml_config = {
+        'implementationguides': {}
+    }
+    all_packages = {}
+    
+    # Identify all packages to include (selected IGs and their dependencies)
+    queue = selected_ig_names.copy()
+    processed = set()
+    while queue:
+        ig_name = queue.pop(0)
+        if ig_name in processed:
+            continue
+        
+        if ig_name in all_loaded_igs:
+            ig_info = all_loaded_igs[ig_name]
+            all_packages[ig_name] = ig_info
+            
+            # Add dependencies to the queue
+            for dep_name, dep_version in ig_info.get('dependencies', {}).items():
+                if dep_name not in processed:
+                    queue.append(dep_name)
+        processed.add(ig_name)
+
+    # Generate the YAML for each collected package
+    for name, info in all_packages.items():
+        yaml_key = name.replace('.', '_').replace('-', '_') + '_ig'
+        yaml_config['implementationguides'][yaml_key] = {
+            'name': info['name'],
+            'version': info['version'],
+            'packageUrl': info['packageUrl'],
+            'installMode': 'STORE_AND_INSTALL',
+            'reloadExisting': True
+        }
+        
+    return yaml.dump(yaml_config, default_flow_style=False, indent=2)
 
 
 # --- Standalone Test ---

@@ -29,6 +29,7 @@ import re
 import yaml
 import threading
 import time # Add time import
+import io
 import services
 from services import (
     services_bp,
@@ -44,9 +45,14 @@ from services import (
     pkg_version,
     get_package_description,
     safe_parse_version,
-    import_manual_package_and_dependencies
+    import_manual_package_and_dependencies,
+    parse_and_list_igs, 
+    generate_ig_yaml,
+    apply_and_validate,
+    run_validator_cli,
+    uuid
 )
-from forms import IgImportForm, ManualIgImportForm, ValidationForm, FSHConverterForm, TestDataUploadForm, RetrieveSplitDataForm
+from forms import IgImportForm, ManualIgImportForm, ValidationForm, FSHConverterForm, TestDataUploadForm, RetrieveSplitDataForm, IgYamlForm
 from wtforms import SubmitField
 from package import package_bp
 from flasgger import Swagger, swag_from # Import Flasgger
@@ -66,10 +72,15 @@ app.config['FHIR_PACKAGES_DIR'] = os.path.join(instance_path, 'fhir_packages')
 app.config['API_KEY'] = os.environ.get('API_KEY', 'your-fallback-api-key-here')
 app.config['VALIDATE_IMPOSED_PROFILES'] = True
 app.config['DISPLAY_PROFILE_RELATIONSHIPS'] = True
+app.config['LATEST_BUILD_URL'] = "http://build.fhir.org/ig/qas.json"
+app.config['VALIDATION_LOG_DIR'] = os.path.join(app.instance_path, 'validation_logs')
+os.makedirs(app.config['VALIDATION_LOG_DIR'], exist_ok=True)
 app.config['UPLOAD_FOLDER'] = os.path.join(CURRENT_DIR, 'static', 'uploads')  # For GoFSH output
 app.config['APP_BASE_URL'] = os.environ.get('APP_BASE_URL', 'http://localhost:5000')
 app.config['HAPI_FHIR_URL'] = os.environ.get('HAPI_FHIR_URL', 'http://localhost:8080/fhir')
 CONFIG_PATH = os.environ.get('CONFIG_PATH', '/usr/local/tomcat/conf/application.yaml')
+
+
 
 # Basic Swagger configuration
 app.config['SWAGGER'] = {
@@ -531,6 +542,29 @@ def restart_tomcat():
 @app.route('/config-hapi')
 def config_hapi():
     return render_template('config_hapi.html', site_name='FHIRFLARE IG Toolkit', now=datetime.datetime.now())
+
+@app.route('/api/get-local-server-url', methods=['GET'])
+@swag_from({
+    'tags': ['FHIR Server Configuration'],
+    'summary': 'Get the local FHIR server URL.',
+    'description': 'Retrieves the base URL of the configured local FHIR server (HAPI). This is used by frontend components to make direct requests, bypassing the proxy.',
+    'responses': {
+        '200': {
+            'description': 'The URL of the local FHIR server.',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'url': {'type': 'string', 'example': 'http://localhost:8080/fhir'}
+                }
+            }
+        }
+    }
+})
+def get_local_server_url():
+    """
+    Expose the local HAPI FHIR server URL to the frontend.
+    """
+    return jsonify({'url': app.config.get('HAPI_FHIR_URL', 'http://localhost:8080/fhir')})
 
 @app.route('/manual-import-ig', methods=['GET', 'POST'])
 def manual_import_ig():
@@ -1737,6 +1771,157 @@ csrf.exempt(api_push_ig)   # Add this line
 
 # Exempt the entire API blueprint (for routes defined IN services.py, like /api/validate-sample)
 csrf.exempt(services_bp) # Keep this line for routes defined in the blueprint
+
+@app.route('/validate-sample', methods=['GET'])
+def validate_resource_page():
+    """Renders the validation form page."""
+    form = ValidationForm()
+    # Fetch list of packages to populate the dropdown
+    packages = current_app.config.get('MANUAL_PACKAGE_CACHE', [])
+    return render_template('validate_sample.html', form=form, packages=packages)
+
+@app.route('/api/validate', methods=['POST'])
+@swag_from({
+    'tags': ['Validation'],
+    'summary': 'Starts a validation process for a FHIR resource or bundle.',
+    'description': 'Starts a validation task and immediately returns a task ID for polling. The actual validation is run in a separate thread to prevent timeouts.',
+    'security': [{'ApiKeyAuth': []}],
+    'consumes': ['application/json'],
+    'parameters': [
+        {
+            'name': 'validation_payload',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'required': ['package_name', 'version', 'fhir_resource'],
+                'properties': {
+                    'package_name': {'type': 'string', 'example': 'hl7.fhir.us.core'},
+                    'version': {'type': 'string', 'example': '6.1.0'},
+                    'fhir_resource': {'type': 'string', 'description': 'A JSON string of the FHIR resource or Bundle to validate.'},
+                    'fhir_version': {'type': 'string', 'example': '4.0.1'},
+                    'do_native': {'type': 'boolean', 'default': False},
+                    'hint_about_must_support': {'type': 'boolean', 'default': False},
+                    'assume_valid_rest_references': {'type': 'boolean', 'default': False},
+                    'no_extensible_binding_warnings': {'type': 'boolean', 'default': False},
+                    'show_times': {'type': 'boolean', 'default': False},
+                    'allow_example_urls': {'type': 'boolean', 'default': False},
+                    'check_ips_codes': {'type': 'boolean', 'default': False},
+                    'allow_any_extensions': {'type': 'boolean', 'default': False},
+                    'tx_routing': {'type': 'boolean', 'default': False},
+                    'snomed_ct_version': {'type': 'string', 'default': ''},
+                    'profiles': {'type': 'string', 'description': 'Comma-separated list of profile URLs.'},
+                    'extensions': {'type': 'string', 'description': 'Comma-separated list of extension URLs.'},
+                    'terminology_server': {'type': 'string', 'description': 'URL of an alternate terminology server.'}
+                }
+            }
+        }
+    ],
+    'responses': {
+        '202': {'description': 'Validation process started successfully, returns a task_id.'},
+        '400': {'description': 'Invalid request (e.g., missing fields, invalid JSON).'}
+    }
+})
+def validate_resource():
+    """API endpoint to run validation on a FHIR resource."""
+    try:
+        # Get data from the JSON payload
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': 'Invalid JSON: No data received.'}), 400
+            
+        fhir_resource_text = data.get('fhir_resource')
+        fhir_version = data.get('fhir_version')
+        package_name = data.get('package_name')
+        version = data.get('version')
+        profiles = data.get('profiles')
+        extensions = data.get('extensions')
+        terminology_server = data.get('terminology_server')
+        snomed_ct_version = data.get('snomed_ct_version')
+        
+        # Build the list of IGs from the package name and version
+        igs = [f"{package_name}#{version}"] if package_name and version else []
+        
+        flags = {
+            'doNative': data.get('do_native'),
+            'hintAboutMustSupport': data.get('hint_about_must_support'),
+            'assumeValidRestReferences': data.get('assume_valid_rest_references'),
+            'noExtensibleBindingWarnings': data.get('no_extensible_binding_warnings'),
+            'showTimes': data.get('show_times'),
+            'allowExampleUrls': data.get('allow_example_urls'),
+            'checkIpsCodes': data.get('check_ips_codes'),
+            'allowAnyExtensions': data.get('allow_any_extensions'),
+            'txRouting': data.get('tx_routing'),
+        }
+
+        # Check for empty resource
+        if not fhir_resource_text:
+            return jsonify({'status': 'error', 'message': 'No FHIR resource provided.'}), 400
+        
+        try:
+            # Generate a unique task ID
+            task_id = str(uuid.uuid4())
+            
+            # Store a pending status in the global cache
+            with services.cache_lock:
+                services.validation_results_cache[task_id] = {"status": "pending"}
+            
+            # Start the validation process in a new thread
+            app_context = app.app_context()
+            thread = threading.Thread(
+                target=services.validate_in_thread,
+                args=(app_context, task_id, fhir_resource_text, fhir_version, igs, profiles, extensions, terminology_server, flags, snomed_ct_version),
+                daemon=True
+            )
+            thread.start()
+            
+            logger.info(f"Validation task {task_id} started in background thread.")
+            
+            return jsonify({"status": "accepted", "message": "Validation started", "task_id": task_id}), 202
+
+        except Exception as e:
+            logger.error(f"Error starting validation thread: {e}", exc_info=True)
+            return jsonify({'status': 'error', 'message': f'An internal server error occurred while starting the validation: {e}'}), 500
+
+    except Exception as e:
+        logger.error(f"Validation API error: {e}")
+        return jsonify({'status': 'error', 'message': f'An internal server error occurred: {e}'}), 500
+
+@app.route('/api/check-validation-status/<task_id>', methods=['GET'])
+@swag_from({
+    'tags': ['Validation'],
+    'summary': 'Check the status of a validation task.',
+    'description': 'Polls for the result of a validation task by its ID. Returns the full validation report when the task is complete.',
+    'security': [{'ApiKeyAuth': []}],
+    'parameters': [
+        {'name': 'task_id', 'in': 'path', 'type': 'string', 'required': True, 'description': 'The unique ID of the validation task.'}
+    ],
+    'responses': {
+        '200': {'description': 'Returns the full validation report if the task is complete.'},
+        '202': {'description': 'The validation task is still in progress.'},
+        '404': {'description': 'The specified task ID was not found.'}
+    }
+})
+def check_validation_status(task_id):
+    """
+    This GET endpoint is polled by the frontend to check the status of a validation task.
+    """
+    with services.cache_lock:
+        task_result = services.validation_results_cache.get(task_id)
+
+    if task_result is None:
+        return jsonify({"status": "error", "message": "Task not found."}), 404
+        
+    if task_result["status"] == "pending":
+        return jsonify({"status": "pending", "message": "Validation is still in progress."}), 202
+
+    # Remove the result from the cache after it has been retrieved to prevent a memory leak
+    with services.cache_lock:
+        del services.validation_results_cache[task_id]
+
+    return jsonify({"status": "complete", "result": task_result["result"]}), 200
+
+
 
 def create_db():
     logger.debug(f"Attempting to create database tables for URI: {app.config['SQLALCHEMY_DATABASE_URI']}")
@@ -3133,7 +3318,74 @@ def package_details_view(name):
                            package_name=actual_package_name,
                            latest_official_version=latest_official_version_str)
 
+@app.route('/ig-configurator', methods=['GET', 'POST'])
+def ig_configurator():
+    form = IgYamlForm()
+    packages_dir = current_app.config['FHIR_PACKAGES_DIR']
+    loaded_igs = services.parse_and_list_igs(packages_dir)
+    
+    form.igs.choices = [(name, f"{name} ({info['version']})") for name, info in loaded_igs.items()]
+    
+    yaml_output = None
+    
+    if form.validate_on_submit():
+        selected_ig_names = form.igs.data
+        
+        try:
+            yaml_output = generate_ig_yaml(selected_ig_names, loaded_igs)
+            flash("YAML configuration generated successfully!", "success")
+        except Exception as e:
+            flash(f"Error generating YAML: {str(e)}", "error")
+            logger.error(f"Error generating YAML: {str(e)}", exc_info=True)
 
+    return render_template('ig_configurator.html', form=form, yaml_output=yaml_output)
+
+@app.route('/download/<path:filename>')
+def download_file(filename):
+    """
+    Serves a file from the temporary directory created during validation.
+    The filename includes the unique temporary directory name to prevent
+    unauthorized file access and to correctly locate the file.
+    """
+    # Use the stored temporary directory path from app.config
+    temp_dir = current_app.config.get('VALIDATION_TEMP_DIR')
+    
+    # If no temporary directory is set, or it's a security risk, return a 404.
+    if not temp_dir or not os.path.exists(temp_dir):
+        logger.error(f"Download request failed: Temporary directory not found or expired. Path: {temp_dir}")
+        return jsonify({"error": "File not found or validation session expired."}), 404
+        
+    # Construct the full file path.
+    file_path = os.path.join(temp_dir, filename)
+
+    if not os.path.exists(file_path):
+        logger.error(f"File not found for download: {file_path}")
+        return jsonify({"error": "File not found."}), 404
+        
+    try:
+        # Use send_file with as_attachment=True to trigger a download
+        return send_file(file_path, as_attachment=True, download_name=filename)
+    except Exception as e:
+        logger.error(f"Error serving file {file_path}: {str(e)}")
+        return jsonify({"error": "Error serving file.", "details": str(e)}), 500
+
+@app.route('/api/clear-validation-results', methods=['POST'])
+@csrf.exempt
+def clear_validation_results():
+    """
+    Clears the temporary directory containing the last validation run's results.
+    """
+    temp_dir = current_app.config.get('VALIDATION_TEMP_DIR')
+    if temp_dir and os.path.exists(temp_dir):
+        try:
+            shutil.rmtree(temp_dir)
+            current_app.config['VALIDATION_TEMP_DIR'] = None
+            return jsonify({"status": "success", "message": f"Results cleared successfully."})
+        except Exception as e:
+            logger.error(f"Failed to clear validation results at {temp_dir}: {e}")
+            return jsonify({"status": "error", "message": f"Failed to clear results: {e}"}), 500
+    else:
+        return jsonify({"status": "success", "message": "No results to clear."})
 
 @app.route('/favicon.ico')
 def favicon():
