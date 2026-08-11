@@ -941,10 +941,23 @@ def process_ig():
             return redirect(url_for('view_igs'))
 
         name, version = services.parse_package_filename(filename)
-        if not name: # Add fallback naming if parse fails
-             name = filename[:-4].replace('_', '.') # Basic guess
-             version = 'unknown'
-             logger.warning(f"Using fallback naming for {filename} -> {name}#{version}")
+        if not name or not version:
+            # Filename didn't encode name/version (e.g. "package.tgz") — read package.json inside
+            try:
+                with tarfile.open(tgz_path, "r:gz") as _tar:
+                    _pkg_member = _tar.getmember("package/package.json")
+                    with _tar.extractfile(_pkg_member) as _f:
+                        _pkg_data = json.loads(_f.read().decode('utf-8-sig'))
+                        name = _pkg_data.get('name', name) or name
+                        version = _pkg_data.get('version', version) or version
+                logger.info(f"Resolved name/version from package.json: {name}#{version}")
+            except Exception as _e:
+                logger.warning(f"Could not read package.json from {filename}: {_e}")
+            if not name:
+                name = filename[:-4].replace('_', '.')
+            if not version:
+                version = 'unknown'
+            logger.warning(f"Using package.json/fallback naming for {filename} -> {name}#{version}")
 
         try:
             logger.info(f"Starting processing for {name}#{version} from file {filename}")

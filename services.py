@@ -452,6 +452,22 @@ def get_additional_registries():
     return feeds
 # --- END MODIFIED FUNCTION ---
 
+def _read_name_version_from_tgz(tgz_path, fallback_name=None, fallback_version=None):
+    """Read package name and version from package/package.json inside a .tgz archive."""
+    try:
+        with tarfile.open(tgz_path, "r:gz") as tar:
+            member = tar.getmember("package/package.json")
+            with tar.extractfile(member) as f:
+                data = json.loads(f.read().decode('utf-8-sig'))
+                name = data.get('name', fallback_name) or fallback_name
+                version = data.get('version', fallback_version) or fallback_version
+                logger.info(f"Read name/version from package.json in {os.path.basename(tgz_path)}: {name}#{version}")
+                return name, version
+    except Exception as e:
+        logger.warning(f"Could not read package.json from {tgz_path}: {e}")
+        return fallback_name, fallback_version
+
+
 def import_manual_package_and_dependencies(input_source, version=None, dependency_mode='recursive', is_file=False, is_url=False, resolve_dependencies=True):
     """
     Import a FHIR Implementation Guide package manually, cloning import_package_and_dependencies.
@@ -492,10 +508,16 @@ def import_manual_package_and_dependencies(input_source, version=None, dependenc
                 results['errors'].append(f"File not found: {tgz_path}")
                 return results
             name, version = parse_package_filename(os.path.basename(tgz_path))
+            if not name or not version:
+                name, version = _read_name_version_from_tgz(tgz_path, name, version)
             if not name:
                 name = os.path.splitext(os.path.basename(tgz_path))[0]
+            if not version:
                 version = "unknown"
             target_filename = construct_tgz_filename(name, version)
+            if not target_filename:
+                results['errors'].append(f"Could not determine valid name/version for {os.path.basename(tgz_path)}")
+                return results
             target_path = os.path.join(download_dir, target_filename)
             shutil.copy(tgz_path, target_path)
             results['downloaded'][name, version] = target_path
@@ -505,8 +527,11 @@ def import_manual_package_and_dependencies(input_source, version=None, dependenc
                 results['errors'].append(f"Failed to download package from URL: {input_source}")
                 return results
             name, version = parse_package_filename(os.path.basename(tgz_path))
+            if not name or not version:
+                name, version = _read_name_version_from_tgz(tgz_path, name, version)
             if not name:
                 name = os.path.splitext(os.path.basename(tgz_path))[0]
+            if not version:
                 version = "unknown"
             results['downloaded'][name, version] = tgz_path
         else:
